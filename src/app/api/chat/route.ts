@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { buildSystemPrompt } from "@/services/prompt-builder";
-import { prisma } from "@/services/db";
 import { schemaExtractor } from "@/services/schema-extractor";
+import { PYTHON_BACKEND_URL } from "@/lib/config";
 
 export async function POST(req: Request) {
   try {
@@ -32,6 +32,7 @@ export async function POST(req: Request) {
             rows: [],
             queryError: validation.reason,
             validationError: validation.reason,
+            status: "error",
           },
         ],
       });
@@ -47,7 +48,7 @@ export async function POST(req: Request) {
     const systemPrompt = buildSystemPrompt(lastUserMessage);
 
     // ── STEP 1: Generate SQL queries dari AI ──
-    const pythonBackendRes = await fetch("http://localhost:8000/api/generate", {
+    const pythonBackendRes = await fetch(`${PYTHON_BACKEND_URL}/api/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -65,75 +66,18 @@ export async function POST(req: Request) {
 
     const result = await pythonBackendRes.json();
 
-    // ── STEP 2: Eksekusi setiap query ke DB, kumpulkan rows ──
     const queries: any[] = result.queries || [];
-    const executedQueries = await Promise.all(
-      queries.map(async (queryObj: any) => {
-        if (!queryObj.sql || queryObj.sql.trim() === "") {
-          return {
-            ...queryObj,
-            rows: [],
-            queryError:
-              queryObj.validationError || "SQL kosong atau tidak valid",
-          };
-        }
-
-        try {
-          let rows = await prisma.$queryRawUnsafe(queryObj.sql);
-          rows = JSON.parse(
-            JSON.stringify(rows, (key, value) =>
-              typeof value === "bigint" ? value.toString() : value,
-            ),
-          );
-          return { ...queryObj, rows, queryError: null };
-        } catch (error: any) {
-          console.error(`Database execution error (${queryObj.title}):`, error);
-          return {
-            ...queryObj,
-            rows: [],
-            queryError: error.message,
-          };
-        }
-      }),
-    );
-
-    // ── STEP 3: Generate insight berdasarkan data NYATA ──
-    // Kirim hasil rows ke AI untuk insight yang akurat, bukan generic
-    let finalInsight: string | null = null;
-    const queriesWithData = executedQueries.filter(
-      (q) => q.rows && q.rows.length > 0,
-    );
-
-    if (queriesWithData.length > 0) {
-      try {
-        const insightRes = await fetch("http://localhost:8000/api/insight", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            user_question: lastUserMessage,
-            query_results: queriesWithData.map((q) => ({
-              title: q.title,
-              rows: q.rows,
-            })),
-            model: selectedModel,
-          }),
-        });
-
-        if (insightRes.ok) {
-          const insightData = await insightRes.json();
-          finalInsight = insightData.insight || null;
-        }
-      } catch (err) {
-        console.error("Insight generation failed (non-critical):", err);
-        // Fallback ke insight generic dari AI jika endpoint insight gagal
-        finalInsight = result.insight || null;
-      }
-    }
+    const pendingQueries = queries.map((q: any) => ({
+      ...q,
+      rows: undefined,
+      queryError: null,
+      status: "pending",
+    }));
 
     return NextResponse.json({
       explanation: result.explanation,
-      insight: finalInsight,
-      queries: executedQueries,
+      insight: null,
+      queries: pendingQueries,
     });
   } catch (error: any) {
     console.error("Error in AI Route:", error);

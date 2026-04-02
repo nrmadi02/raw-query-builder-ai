@@ -1,6 +1,14 @@
 node_modules
 # Keep environment variables out of version control
 .env
+.env.local
+
+# Python cache
+__pycache__/
+*.pyc
+
+# TypeScript build info
+tsconfig.tsbuildinfo
 
 /generated/prisma
 
@@ -9,6 +17,7 @@ node_modules
 
 # IDE/Editor
 .qwen/
+.omc/
 
 # Cache
 .ruff_cache/

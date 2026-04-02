@@ -48,15 +48,19 @@ export class SchemaExtractor {
   private tableNames: string[] = [];
   private columnNames: string[] = [];
   private tableAliases: Record<string, string[]> = {};
+  private rawSchemaCache: string | null = null;
 
   constructor() {
     this.schemaPath = path.join(process.cwd(), "prisma/schema.prisma");
     this.extractSchemaInfo();
   }
 
-  // Ekstrak schema mentah
+  // Ekstrak schema mentah (cached)
   getRawSchema(): string {
-    return fs.readFileSync(this.schemaPath, "utf-8");
+    if (!this.rawSchemaCache) {
+      this.rawSchemaCache = fs.readFileSync(this.schemaPath, "utf-8");
+    }
+    return this.rawSchemaCache;
   }
 
   // Ekstrak hanya model definitions (tanpa datasource/generator)

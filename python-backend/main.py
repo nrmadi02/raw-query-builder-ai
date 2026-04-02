@@ -35,10 +35,11 @@ for k, v in _KEYS_STATUS.items():
 print("=" * 50)
 
 
-# CORS (Izinkan panggilan dari Next.js localhost)
+# CORS (Izinkan panggilan dari Next.js frontend)
+_allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[o.strip() for o in _allowed_origins],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
