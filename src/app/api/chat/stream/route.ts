@@ -1,11 +1,19 @@
-import { buildSystemPrompt } from "@/services/prompt-builder";
-import { schemaExtractor } from "@/services/schema-extractor";
+import {
+  buildSystemPrompt,
+  buildTableSelectionPrompt,
+  type DatabaseType,
+} from "@/services/prompt-builder";
+import { querySchemaExtractor } from "@/services/query-schema-extractor";
 import { PYTHON_BACKEND_URL } from "@/lib/config";
+
+// Default database untuk Samsat Kalimantan Selatan
+const DEFAULT_DATABASE: DatabaseType = "remote";
 
 export async function POST(req: Request) {
   try {
-    const { messages, model } = await req.json();
+    const { messages, model, database } = await req.json();
     const selectedModel = model || "gemini/gemini-2.0-flash-exp";
+    const selectedDatabase: DatabaseType = database || DEFAULT_DATABASE;
     const lastUserMessage = messages[messages.length - 1]?.content;
 
     if (!lastUserMessage) {
@@ -18,7 +26,8 @@ export async function POST(req: Request) {
       );
     }
 
-    const validation = schemaExtractor.validateContext(lastUserMessage);
+    // Validate context menggunakan query schema extractor untuk Samsat
+    const validation = querySchemaExtractor.validateContext(lastUserMessage);
 
     if (!validation.isValid) {
       const encoder = new TextEncoder();
@@ -27,7 +36,7 @@ export async function POST(req: Request) {
           controller.enqueue(
             encoder.encode(
               `event: metadata\ndata: ${JSON.stringify({
-                explanation: "Pertanyaan di luar konteks",
+                explanation: "Pertanyaan di luar konteks database Samsat",
                 insight: null,
                 queries: [
                   {
@@ -58,10 +67,40 @@ export async function POST(req: Request) {
       });
     }
 
-    const systemPrompt = buildSystemPrompt(lastUserMessage);
+    // ── STEP 1: Select relevant tables (Two-Step LLM) ──
+    let selectedTables: string[] | undefined;
+
+    try {
+      const tableSelectionPrompt = buildTableSelectionPrompt(lastUserMessage);
+      const selectRes = await fetch(`${PYTHON_BACKEND_URL}/api/select-tables`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [
+            { role: "system", content: tableSelectionPrompt },
+            { role: "user", content: lastUserMessage },
+          ],
+          model: selectedModel,
+        }),
+      });
+
+      if (selectRes.ok) {
+        const selectResult = await selectRes.json();
+        selectedTables = selectResult.tables;
+        console.log(`[Stream Route] Table Selection: ${selectedTables?.length || 0} tables`, selectedTables);
+      } else {
+        console.warn("[Stream Route] Table Selection failed, using full schema");
+      }
+    } catch (err) {
+      console.warn("[Stream Route] Table Selection error, using full schema:", err);
+    }
+
+    // ── STEP 2: Build prompt with filtered schema ──
+    const systemPrompt = buildSystemPrompt(lastUserMessage, selectedDatabase, selectedTables);
 
     console.log("[Stream Route] Sending to Python backend:", {
       model: selectedModel,
+      database: selectedDatabase,
       userMessage: lastUserMessage?.substring(0, 50),
     });
 

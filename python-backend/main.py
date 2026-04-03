@@ -14,18 +14,33 @@ import litellm
 _ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(dotenv_path=os.path.join(_ROOT_DIR, ".env"))
 
+# LiteLLM expects ZAI_API_KEY for zai/* models — ensure it's set
+# (ZAI_API_KEY is loaded from .env by python-dotenv above)
+
 app = FastAPI(title="AI Query Builder Backend (Python)")
+
+# Drop unsupported params globally (e.g. zai doesn't support response_format)
+litellm.drop_params = True
 
 # Log status API keys saat startup
 _KEYS_STATUS = {
     "GEMINI_API_KEY": "✅ Loaded"
     if os.getenv("GEMINI_API_KEY") and "xxxxx" not in os.getenv("GEMINI_API_KEY", "")
     else "❌ Missing/Placeholder",
+    "DEEPSEEK_API_KEY": "✅ Loaded"
+    if os.getenv("DEEPSEEK_API_KEY") and "xxxxx" not in os.getenv("DEEPSEEK_API_KEY", "")
+    else "❌ Missing/Placeholder",
+    "OPENROUTER_API_KEY": "✅ Loaded"
+    if os.getenv("OPENROUTER_API_KEY") and "xxxxx" not in os.getenv("OPENROUTER_API_KEY", "")
+    else "❌ Missing/Placeholder",
     "GROQ_API_KEY": "✅ Loaded"
     if os.getenv("GROQ_API_KEY") and "xxxxx" not in os.getenv("GROQ_API_KEY", "")
     else "❌ Missing/Placeholder",
     "OPENAI_API_KEY": "✅ Loaded"
     if os.getenv("OPENAI_API_KEY") and "xxxxx" not in os.getenv("OPENAI_API_KEY", "")
+    else "❌ Missing/Placeholder",
+    "ZAI_API_KEY": "✅ Loaded"
+    if os.getenv("ZAI_API_KEY") and "your-" not in os.getenv("ZAI_API_KEY", "")
     else "❌ Missing/Placeholder",
 }
 print("=" * 50)
@@ -54,6 +69,11 @@ class Message(BaseModel):
 class GenerateRequest(BaseModel):
     messages: List[Message]
     model: Optional[str] = "gemini/gemini-2.0-flash-exp"  # Default: free model
+
+
+class TableSelectionRequest(BaseModel):
+    messages: List[Message]
+    model: Optional[str] = "gemini/gemini-2.0-flash-exp"
 
 
 class QueryResultSummary(BaseModel):
@@ -100,6 +120,44 @@ def normalize_response(structured_data: dict) -> dict:
     }
 
 
+@app.post("/api/select-tables")
+async def select_tables(req: TableSelectionRequest):
+    """
+    Step 1: Pilih tabel database yang relevan dengan pertanyaan user.
+    Prompt kecil (~500 tokens), response JSON: {"tables": ["table1", "table2"]}
+    """
+    try:
+        print(f"[Select Tables] Model: {req.model}")
+
+        messages_dict = [
+            {"role": msg.role, "content": msg.content} for msg in req.messages
+        ]
+
+        response = litellm.completion(
+            model=req.model,
+            messages=messages_dict,
+            response_format={"type": "json_object"},
+            timeout=30,
+        )
+
+        content = response.choices[0].message.content
+
+        try:
+            result = json.loads(content)
+        except Exception:
+            cleaned = content.replace("```json\n", "").replace("```", "").strip()
+            result = json.loads(cleaned)
+
+        tables = result.get("tables", [])
+        print(f"[Select Tables] Selected: {tables}")
+
+        return {"tables": tables}
+
+    except Exception as e:
+        print(f"[Select Tables] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/generate")
 async def generate_sql(req: GenerateRequest):
     try:
@@ -111,23 +169,12 @@ async def generate_sql(req: GenerateRequest):
             {"role": msg.role, "content": msg.content} for msg in req.messages
         ]
 
-        # Fallback: jika model primer gagal (rate limit/model tidak tersedia)
-        fallback_models = [
-            "gemini/gemini-2.0-flash-exp",  # Free, Google AI Studio
-            "gemini/gemini-1.5-flash-latest",  # Free, Google AI Studio (lebih stabil)
-            "groq/llama-3.3-70b-versatile",  # Free, Groq
-            "anthropic/claude-3-5-sonnet-20240620",  # Paid, Anthropic
-        ]
-        # Hapus model primer dari fallback agar tidak duplikat
-        fallback_models = [m for m in fallback_models if m != req.model]
+        print(f"Mengirim request ke {req.model}...")
 
-        print(f"Mengirim request ke {req.model} (fallbacks: {fallback_models})...")
-
-        # Eksekusi SDK
+        # Eksekusi SDK (tanpa fallback — error langsung terlihat)
         response = litellm.completion(
             model=req.model,
             messages=messages_dict,
-            fallbacks=fallback_models,
             response_format={"type": "json_object"},  # Wajibkan output JSON murni
         )
 
@@ -205,13 +252,6 @@ async def generate_insight(req: InsightRequest):
             f"Jangan generic. Langsung ke poin utama. Maks 3 kalimat."
         )
 
-        fallback_models = [
-            "gemini/gemini-2.0-flash-exp",
-            "gemini/gemini-1.5-flash-latest",
-            "groq/llama-3.3-70b-versatile",
-        ]
-        fallback_models = [m for m in fallback_models if m != req.model]
-
         print(f"[Insight] Generating insight untuk: '{req.user_question}'")
 
         response = litellm.completion(
@@ -222,7 +262,6 @@ async def generate_insight(req: InsightRequest):
                     "content": prompt,
                 }
             ],
-            fallbacks=fallback_models,
         )
 
         insight_text = response.choices[0].message.content.strip()
@@ -269,20 +308,12 @@ async def generate_insight_stream(req: InsightRequest):
                 f"6. JANGAN menjelaskan apa itu query atau metrik, LANGSUNG jawab pertanyaannya"
             )
 
-            fallback_models = [
-                "gemini/gemini-2.0-flash-exp",
-                "gemini/gemini-1.5-flash-latest",
-                "groq/llama-3.3-70b-versatile",
-            ]
-            fallback_models = [m for m in fallback_models if m != req.model]
-
             print(f"[Insight Stream] Starting stream for: '{req.user_question}'")
             yield f"data: {json.dumps({'status': 'starting'})}\n\n"
 
             response = litellm.completion(
                 model=req.model or "gemini/gemini-2.0-flash-exp",
                 messages=[{"role": "user", "content": prompt}],
-                fallbacks=fallback_models,
                 stream=True,
             )
 

@@ -69,6 +69,7 @@ export function useStreamChat() {
               sql: query.sql,
               page: 1,
               pageSize: 10,
+              database: "remote", // Gunakan database Samsat Kalimantan Selatan
             }),
             signal,
           });

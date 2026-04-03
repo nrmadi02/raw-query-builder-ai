@@ -46,13 +46,18 @@ export function QueryBlock({
   const [currentPage, setCurrentPage] = useState(1);
   const hasLocalEdit = useRef(false);
 
+  // Track whether React Query has taken over pagination (after initial execution completes)
+  const [reactQueryActive, setReactQueryActive] = useState(false);
+
   // Use React Query for query execution with pagination
+  // Only activate AFTER the parent has finished the initial execution (status = "completed")
+  // This avoids double-fetching during the initial load from use-stream-chat.ts
   const {
     data: queryData,
     isLoading: pageLoading,
     error: queryError,
   } = useQueryExecution(query.sql, currentPage, PAGE_SIZE, {
-    enabled: query.status !== "pending" && query.status !== "executing",
+    enabled: reactQueryActive && !!query.sql,
   });
 
   // Use React Query for re-running queries
@@ -62,34 +67,42 @@ export function QueryBlock({
   useEffect(() => {
     if (initialQuery.status === "pending") {
       hasLocalEdit.current = false;
+      setReactQueryActive(false);
+      setCurrentPage(1);
+      setQuery(initialQuery);
+      return;
     }
     if (hasLocalEdit.current) return;
-    if (
-      initialQuery.status !== query.status ||
-      initialQuery.rows !== query.rows ||
-      initialQuery.executionTimeMs !== query.executionTimeMs ||
-      initialQuery.queryError !== query.queryError ||
-      initialQuery.pagination !== query.pagination
-    ) {
-      setQuery(initialQuery);
-      setCurrentPage(1);
+    if (initialQuery.status === "completed" && !reactQueryActive) {
+      // Parent finished initial execution — take over with React Query for pagination
+      setReactQueryActive(true);
+      setQuery((prev) => ({
+        ...prev,
+        status: "completed",
+        rows: initialQuery.rows,
+        columns: initialQuery.columns || prev.columns,
+        executionTimeMs: initialQuery.executionTimeMs,
+        queryError: null,
+        pagination: initialQuery.pagination,
+      }));
+      return;
     }
-  }, [
-    initialQuery.status,
-    initialQuery.rows,
-    initialQuery.executionTimeMs,
-    initialQuery.queryError,
-    initialQuery.pagination,
-    query.status,
-    query.rows,
-    query.executionTimeMs,
-    query.queryError,
-    query.pagination,
-  ]);
+    if (
+      initialQuery.status === "error" ||
+      initialQuery.queryError
+    ) {
+      setQuery((prev) => ({
+        ...prev,
+        status: "error",
+        queryError: initialQuery.queryError,
+        rows: [],
+      }));
+    }
+  }, [initialQuery.status, initialQuery.queryError, reactQueryActive]);
 
-  // Update query when React Query data changes
+  // Update query when React Query data changes (pagination)
   useEffect(() => {
-    if (queryData && !hasLocalEdit.current) {
+    if (queryData && reactQueryActive) {
       setQuery((prev) => ({
         ...prev,
         rows: queryData.rows,
@@ -98,17 +111,17 @@ export function QueryBlock({
         pagination: queryData.pagination,
       }));
     }
-  }, [queryData]);
+  }, [queryData, reactQueryActive]);
 
   // Update error state
   useEffect(() => {
-    if (queryError) {
+    if (queryError && reactQueryActive) {
       setQuery((prev) => ({
         ...prev,
         queryError: queryError.message,
       }));
     }
-  }, [queryError]);
+  }, [queryError, reactQueryActive]);
 
   // Cleanup timeout refs
   const copiedSQLTimer = useRef<ReturnType<typeof setTimeout>>(undefined);

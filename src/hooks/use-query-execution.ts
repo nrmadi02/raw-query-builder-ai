@@ -26,7 +26,7 @@ async function executeQuery({
   const res = await fetch("/api/chat/execute", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sql, page, pageSize }),
+    body: JSON.stringify({ sql, page, pageSize, database: "remote" }), // Gunakan database Samsat
     signal,
   });
 

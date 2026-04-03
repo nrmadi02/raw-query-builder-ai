@@ -1,0 +1,724 @@
+generator client {
+  provider        = "prisma-client-js"
+  output          = "../src/generated/query-client"
+  previewFeatures = ["partialIndexes"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model active_storage_attachments {
+  id                   BigInt               @id @default(autoincrement())
+  name                 String               @db.VarChar
+  record_type          String               @db.VarChar
+  record_id            BigInt
+  blob_id              BigInt
+  created_at           DateTime             @db.Timestamp(6)
+  active_storage_blobs active_storage_blobs @relation(fields: [blob_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_c3b3935057")
+
+  @@unique([record_type, record_id, name, blob_id], map: "index_active_storage_attachments_uniqueness")
+  @@index([blob_id], map: "index_active_storage_attachments_on_blob_id")
+}
+
+model active_storage_blobs {
+  id                             BigInt                           @id @default(autoincrement())
+  key                            String                           @unique(map: "index_active_storage_blobs_on_key") @db.VarChar
+  filename                       String                           @db.VarChar
+  content_type                   String?                          @db.VarChar
+  metadata                       String?
+  service_name                   String                           @db.VarChar
+  byte_size                      BigInt
+  checksum                       String?                          @db.VarChar
+  created_at                     DateTime                         @db.Timestamp(6)
+  active_storage_attachments     active_storage_attachments[]
+  active_storage_variant_records active_storage_variant_records[]
+}
+
+model active_storage_variant_records {
+  id                   BigInt               @id @default(autoincrement())
+  blob_id              BigInt
+  variation_digest     String               @db.VarChar
+  active_storage_blobs active_storage_blobs @relation(fields: [blob_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_993965df05")
+
+  @@unique([blob_id, variation_digest], map: "index_active_storage_variant_records_uniqueness")
+}
+
+model activities {
+  id          BigInt   @id @default(autoincrement())
+  action      String   @db.VarChar
+  actor_type  String?  @db.VarChar
+  actor_id    BigInt?
+  target_type String?  @db.VarChar
+  target_id   BigInt?
+  created_at  DateTime @db.Timestamp(6)
+  updated_at  DateTime @db.Timestamp(6)
+  context     Json?
+
+  @@index([actor_type, actor_id], map: "index_activities_on_actor")
+  @@index([target_type, target_id], map: "index_activities_on_target")
+}
+
+model admins {
+  id              BigInt    @id @default(autoincrement())
+  full_name       String?   @db.VarChar
+  username        String?   @unique(map: "index_admins_on_username") @db.VarChar
+  password_digest String?   @db.VarChar
+  phone_number    String?   @unique(map: "index_admins_on_phone_number") @db.VarChar
+  login_token     String?   @db.VarChar
+  created_at      DateTime  @db.Timestamp(6)
+  updated_at      DateTime  @db.Timestamp(6)
+  deleted_at      DateTime? @db.Timestamp(6)
+
+  @@index([deleted_at], map: "index_admins_on_deleted_at")
+}
+
+model ar_internal_metadata {
+  key        String   @id @db.VarChar
+  value      String?  @db.VarChar
+  created_at DateTime @db.Timestamp(6)
+  updated_at DateTime @db.Timestamp(6)
+}
+
+model cashier_helper_units {
+  id             BigInt       @id @default(autoincrement())
+  cashier_id     BigInt
+  helper_unit_id BigInt
+  created_at     DateTime     @db.Timestamp(6)
+  updated_at     DateTime     @db.Timestamp(6)
+  cashiers       cashiers     @relation(fields: [cashier_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_28e1c8900c")
+  helper_units   helper_units @relation(fields: [helper_unit_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_5c8ad670d5")
+
+  @@index([cashier_id], map: "index_cashier_helper_units_on_cashier_id")
+  @@index([helper_unit_id], map: "index_cashier_helper_units_on_helper_unit_id")
+}
+
+model cashiers {
+  id                   BigInt                 @id @default(autoincrement())
+  full_name            String?                @db.VarChar
+  username             String?                @db.VarChar
+  password_digest      String?                @db.VarChar
+  phone_number         String?                @db.VarChar
+  login_token          String?                @db.VarChar
+  management_unit_id   BigInt?
+  created_at           DateTime               @db.Timestamp(6)
+  updated_at           DateTime               @db.Timestamp(6)
+  deleted_at           DateTime?              @db.Timestamp(6)
+  cashier_helper_units cashier_helper_units[]
+  management_units     management_units?      @relation(fields: [management_unit_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_9cdf26842e")
+  tax_transactions     tax_transactions[]
+
+  @@index([deleted_at], map: "index_cashiers_on_deleted_at")
+  @@index([management_unit_id], map: "index_cashiers_on_management_unit_id")
+}
+
+model configs {
+  id                                             BigInt   @id @default(autoincrement())
+  head_of_bapenda                                String?  @db.VarChar
+  head_of_bapenda_external_id                    String?  @db.VarChar
+  head_of_korlantas                              String?  @db.VarChar
+  head_of_korlantas_external_id                  String?  @db.VarChar
+  head_of_jr                                     String?  @db.VarChar
+  head_of_jr_external_id                         String?  @db.VarChar
+  tax_year_applied                               Int?
+  opsen_persentation                             Float?
+  first_title_transfer_persentation              Float?
+  first_title_transfer_penalty_persentation      Float?
+  second_title_transfer_persentation             Float?
+  second_title_transfer_penalty_persentation     Float?
+  created_at                                     DateTime @db.Timestamp(6)
+  updated_at                                     DateTime @db.Timestamp(6)
+  on_time_payment_discount_persentation          Float?
+  monthly_penalty_persentation                   Float?   @default(0.0)
+  monthly_opsen_penalty_persentation             Float?   @default(0.0)
+  base_discount_persentation                     Float?   @default(0.0)
+  title_transfer_discount_persentation           Float?   @default(0.0)
+  base_public_transport_tax_percentage           Float?   @default(0.0)
+  title_transfer_public_transport_tax_percentage Float?   @default(0.0)
+}
+
+model countries {
+  id            BigInt          @id @default(autoincrement())
+  code          String?         @db.VarChar
+  name          String?         @db.VarChar
+  deleted_at    DateTime?       @db.Timestamp(6)
+  created_at    DateTime        @db.Timestamp(6)
+  updated_at    DateTime        @db.Timestamp(6)
+  vehicle_taxes vehicle_taxes[]
+
+  @@index([code], map: "index_countries_on_code")
+  @@index([deleted_at], map: "index_countries_on_deleted_at")
+}
+
+model districts {
+  id           BigInt         @id @default(autoincrement())
+  name         String?        @db.VarChar
+  province_id  BigInt
+  regency_id   BigInt
+  deleted_at   DateTime?      @db.Timestamp(6)
+  created_at   DateTime       @db.Timestamp(6)
+  updated_at   DateTime       @db.Timestamp(6)
+  provinces    provinces      @relation(fields: [province_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_915f0b9e3a")
+  regencies    regencies      @relation(fields: [regency_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_d9cf5bc519")
+  subdistricts subdistricts[]
+  vehicles     vehicles[]
+
+  @@index([deleted_at], map: "index_districts_on_deleted_at")
+  @@index([province_id], map: "index_districts_on_province_id")
+  @@index([regency_id], map: "index_districts_on_regency_id")
+}
+
+model formulas {
+  id                       BigInt                 @id @default(autoincrement())
+  vehicle_license_color_id BigInt
+  tax                      String?                @db.VarChar
+  tax_penalty              String?                @db.VarChar
+  deleted_at               DateTime?              @db.Timestamp(6)
+  created_at               DateTime               @db.Timestamp(6)
+  updated_at               DateTime               @db.Timestamp(6)
+  vehicle_license_colors   vehicle_license_colors @relation(fields: [vehicle_license_color_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_94d9c3506c")
+
+  @@index([deleted_at], map: "index_formulas_on_deleted_at")
+  @@index([vehicle_license_color_id], map: "index_formulas_on_vehicle_license_color_id")
+}
+
+model helper_units {
+  id                   BigInt                 @id @default(autoincrement())
+  name                 String?                @db.VarChar
+  management_unit_id   BigInt
+  deleted_at           DateTime?              @db.Timestamp(6)
+  created_at           DateTime               @db.Timestamp(6)
+  updated_at           DateTime               @db.Timestamp(6)
+  counter_type         String?                @db.VarChar
+  helper_unit_type     String?                @db.VarChar
+  place_type           String?                @db.VarChar
+  cashier_helper_units cashier_helper_units[]
+  management_units     management_units       @relation(fields: [management_unit_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_d2bdcd7169")
+  tax_transactions     tax_transactions[]
+  user_helper_units    user_helper_units[]
+
+  @@index([deleted_at], map: "index_helper_units_on_deleted_at")
+  @@index([management_unit_id], map: "index_helper_units_on_management_unit_id")
+}
+
+model insurances {
+  id                                                                BigInt       @id @default(autoincrement())
+  code                                                              String?      @db.VarChar
+  name                                                              String?      @db.VarChar
+  mandatory_contribution_id                                         BigInt?
+  deleted_at                                                        DateTime?    @db.Timestamp(6)
+  created_at                                                        DateTime     @db.Timestamp(6)
+  updated_at                                                        DateTime     @db.Timestamp(6)
+  insurances                                                        insurances?  @relation("insurancesToinsurances", fields: [mandatory_contribution_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_12f1fb48f5")
+  other_insurances                                                  insurances[] @relation("insurancesToinsurances")
+  vehicles_vehicles_insurance_mandatory_contribution_idToinsurances vehicles[]   @relation("vehicles_insurance_mandatory_contribution_idToinsurances")
+  vehicles_vehicles_insurance_vehicle_type_idToinsurances           vehicles[]   @relation("vehicles_insurance_vehicle_type_idToinsurances")
+
+  @@index([deleted_at], map: "index_insurances_on_deleted_at")
+  @@index([mandatory_contribution_id], map: "index_insurances_on_mandatory_contribution_id")
+}
+
+model management_units {
+  id                                                                   BigInt             @id @default(autoincrement())
+  name                                                                 String?            @db.VarChar
+  created_at                                                           DateTime           @db.Timestamp(6)
+  updated_at                                                           DateTime           @db.Timestamp(6)
+  deleted_at                                                           DateTime?          @db.Timestamp(6)
+  eri_code                                                             String?            @db.VarChar
+  head_of_unit                                                         String?            @db.VarChar
+  head_of_unit_identifier                                              String?            @db.VarChar
+  treasurer_of_unit                                                    String?            @db.VarChar
+  treasurer_of_unit_identifier                                         String?            @db.VarChar
+  head_pic_of_vehicle_tax                                              String?            @db.VarChar
+  head_pic_of_vehicle_tax_identifier                                   String?            @db.VarChar
+  insurance_code                                                       String?            @db.VarChar
+  head_of_unit_status                                                  String?            @db.VarChar
+  cashiers                                                             cashiers[]
+  helper_units                                                         helper_units[]
+  tax_transactions                                                     tax_transactions[]
+  users                                                                users[]
+  vehicles_vehicles_mutation_internal_destination_idTomanagement_units vehicles[]         @relation("vehicles_mutation_internal_destination_idTomanagement_units")
+  vehicles_vehicles_management_unit_idTomanagement_units               vehicles[]         @relation("vehicles_management_unit_idTomanagement_units")
+
+  @@index([deleted_at], map: "index_management_units_on_deleted_at")
+  @@index([eri_code], map: "index_management_units_on_eri_code")
+}
+
+model permission_assignments {
+  id               BigInt      @id @default(autoincrement())
+  permissible_id   BigInt
+  permission_id    BigInt
+  created_at       DateTime    @db.Timestamp(6)
+  updated_at       DateTime    @db.Timestamp(6)
+  permissible_type String      @default("User") @db.VarChar
+  users            users       @relation(fields: [permissible_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_b29e483ce4")
+  permissions      permissions @relation(fields: [permission_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_e2cb0687d2")
+
+  @@index([permissible_type, permissible_id], map: "index_permission_assignments_on_permissible")
+  @@index([permission_id], map: "index_permission_assignments_on_permission_id")
+}
+
+model permissions {
+  id                     BigInt                   @id @default(autoincrement())
+  key                    String?                  @db.VarChar
+  name                   String?                  @db.VarChar
+  created_at             DateTime                 @db.Timestamp(6)
+  updated_at             DateTime                 @db.Timestamp(6)
+  context                String?                  @db.VarChar
+  permission_assignments permission_assignments[]
+}
+
+model provinces {
+  id           BigInt         @id @default(autoincrement())
+  name         String?        @db.VarChar
+  deleted_at   DateTime?      @db.Timestamp(6)
+  created_at   DateTime       @db.Timestamp(6)
+  updated_at   DateTime       @db.Timestamp(6)
+  districts    districts[]
+  regencies    regencies[]
+  subdistricts subdistricts[]
+}
+
+model public_holidays {
+  id         BigInt    @id @default(autoincrement())
+  name       String?   @db.VarChar
+  date       DateTime? @db.Date
+  created_at DateTime  @db.Timestamp(6)
+  updated_at DateTime  @db.Timestamp(6)
+}
+
+model regencies {
+  id                                                            BigInt         @id @default(autoincrement())
+  name                                                          String?        @db.VarChar
+  province_id                                                   BigInt
+  deleted_at                                                    DateTime?      @db.Timestamp(6)
+  created_at                                                    DateTime       @db.Timestamp(6)
+  updated_at                                                    DateTime       @db.Timestamp(6)
+  districts                                                     districts[]
+  provinces                                                     provinces      @relation(fields: [province_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_35fea91d76")
+  subdistricts                                                  subdistricts[]
+  vehicles_vehicles_regency_idToregencies                       vehicles[]     @relation("vehicles_regency_idToregencies")
+  vehicles_vehicles_mutation_external_destination_idToregencies vehicles[]     @relation("vehicles_mutation_external_destination_idToregencies")
+
+  @@index([deleted_at], map: "index_regencies_on_deleted_at")
+  @@index([province_id], map: "index_regencies_on_province_id")
+}
+
+model schema_migrations {
+  version String @id @db.VarChar
+}
+
+model subdistricts {
+  id          BigInt     @id @default(autoincrement())
+  name        String?    @db.VarChar
+  province_id BigInt
+  regency_id  BigInt
+  district_id BigInt
+  deleted_at  DateTime?  @db.Timestamp(6)
+  created_at  DateTime   @db.Timestamp(6)
+  updated_at  DateTime   @db.Timestamp(6)
+  regencies   regencies  @relation(fields: [regency_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_2dbe7b7445")
+  districts   districts  @relation(fields: [district_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_418c81cf4b")
+  provinces   provinces  @relation(fields: [province_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_cf480cb5df")
+  vehicles    vehicles[]
+
+  @@index([deleted_at], map: "index_subdistricts_on_deleted_at")
+  @@index([district_id], map: "index_subdistricts_on_district_id")
+  @@index([province_id], map: "index_subdistricts_on_province_id")
+  @@index([regency_id], map: "index_subdistricts_on_regency_id")
+}
+
+model tax_amnesties {
+  id                         BigInt                       @id @default(autoincrement())
+  start_date                 DateTime?                    @db.Date
+  end_date                   DateTime?                    @db.Date
+  deleted_at                 DateTime?                    @db.Timestamp(6)
+  created_at                 DateTime                     @db.Timestamp(6)
+  updated_at                 DateTime                     @db.Timestamp(6)
+  tax_amnesty_type           String?                      @db.VarChar
+  tax_amnesty_license_colors tax_amnesty_license_colors[]
+
+  @@index([deleted_at], map: "index_tax_amnesties_on_deleted_at")
+  @@index([start_date, end_date], map: "index_tax_amnesties_on_start_date_and_end_date")
+}
+
+model tax_amnesty_license_colors {
+  id                     BigInt                 @id @default(autoincrement())
+  tax_amnesty_id         BigInt
+  license_color_id       BigInt
+  created_at             DateTime               @db.Timestamp(6)
+  updated_at             DateTime               @db.Timestamp(6)
+  vehicle_license_colors vehicle_license_colors @relation(fields: [license_color_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_3873c0a865")
+  tax_amnesties          tax_amnesties          @relation(fields: [tax_amnesty_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_d9ff68fd00")
+
+  @@index([license_color_id], map: "index_tax_amnesty_license_colors_on_license_color_id")
+  @@index([tax_amnesty_id], map: "index_tax_amnesty_license_colors_on_tax_amnesty_id")
+}
+
+model tax_transactions {
+  id                           BigInt            @id @default(autoincrement())
+  status                       String?           @db.VarChar
+  external_id                  String?           @db.VarChar
+  payment_channel              String?           @db.VarChar
+  payment_method               String?           @db.VarChar
+  payment_place_id             BigInt?
+  tax_officer_id               BigInt?
+  vehicle_id                   BigInt?
+  base                         Int?              @default(0)
+  penalty                      Int?              @default(0)
+  insurance                    Int?              @default(0)
+  title_transfer               Int?              @default(0)
+  insurance_penalty            Int?              @default(0)
+  title_transfer_penalty       Int?              @default(0)
+  total_amount                 Int?
+  paid_at                      DateTime?         @db.Timestamp(6)
+  created_at                   DateTime          @db.Timestamp(6)
+  updated_at                   DateTime          @db.Timestamp(6)
+  verify_at                    DateTime?         @db.Timestamp(6)
+  defined_at                   DateTime?         @db.Timestamp(6)
+  receiver_id                  BigInt?
+  serial_no                    String?           @db.VarChar
+  management_unit_id           BigInt?
+  sequence_no                  String?           @db.VarChar
+  opsen                        Int?              @default(0)
+  opsen_penalty                Int?              @default(0)
+  opsen_title_transfer         Int?              @default(0)
+  opsen_title_transfer_penalty Int?              @default(0)
+  expired_at                   DateTime?         @db.Timestamp(6)
+  route_permit_no              String?           @db.VarChar
+  route_permit_expiry_date     DateTime?         @db.Date
+  vehicles                     vehicles?         @relation(fields: [vehicle_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_3aa0acf3db")
+  helper_units                 helper_units?     @relation(fields: [payment_place_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_6f2d9fa7be")
+  users                        users?            @relation(fields: [tax_officer_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_7650185a9b")
+  management_units             management_units? @relation(fields: [management_unit_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_8933f97c86")
+  cashiers                     cashiers?         @relation(fields: [receiver_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_c38d5f4e5e")
+  taxations                    taxations[]
+
+  @@index([defined_at], map: "index_tax_transactions_on_defined_at")
+  @@index([external_id], map: "index_tax_transactions_on_external_id")
+  @@index([management_unit_id], map: "index_tax_transactions_on_management_unit_id")
+  @@index([payment_place_id], map: "index_tax_transactions_on_payment_place_id")
+  @@index([receiver_id], map: "index_tax_transactions_on_receiver_id")
+  @@index([status, expired_at], map: "index_tax_transactions_on_status_and_expired_at_not_null", where: raw("(expired_at IS NOT NULL)"))
+  @@index([tax_officer_id], map: "index_tax_transactions_on_tax_officer_id")
+  @@index([vehicle_id], map: "index_tax_transactions_on_vehicle_id")
+  @@index([verify_at], map: "index_tax_transactions_on_verify_at")
+}
+
+model taxations {
+  id                           BigInt            @id @default(autoincrement())
+  taxation_type                String?           @db.VarChar
+  base                         Int?              @default(0)
+  penalty                      Int?              @default(0)
+  insurance                    Int?              @default(0)
+  title_transfer               Int?              @default(0)
+  insurance_penalty            Int?              @default(0)
+  title_transfer_penalty       Int?              @default(0)
+  tax_transaction_id           BigInt?
+  vehicle_id                   BigInt?
+  creator_id                   BigInt?
+  tax_reference_id             BigInt?
+  created_at                   DateTime          @db.Timestamp(6)
+  updated_at                   DateTime          @db.Timestamp(6)
+  tax_date                     DateTime?         @db.Date
+  opsen                        Int?              @default(0)
+  opsen_penalty                Int?              @default(0)
+  opsen_title_transfer         Int?              @default(0)
+  opsen_title_transfer_penalty Int?              @default(0)
+  insurance_prorate            Int?              @default(0)
+  tax_transactions             tax_transactions? @relation(fields: [tax_transaction_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_5740c34af7")
+  vehicle_taxes                vehicle_taxes?    @relation(fields: [tax_reference_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_5d77761280")
+  vehicles                     vehicles?         @relation(fields: [vehicle_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_929ab1fdfa")
+  users                        users?            @relation(fields: [creator_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_e59c1ae685")
+
+  @@index([creator_id], map: "index_taxations_on_creator_id")
+  @@index([tax_reference_id], map: "index_taxations_on_tax_reference_id")
+  @@index([tax_transaction_id], map: "index_taxations_on_tax_transaction_id")
+  @@index([vehicle_id], map: "index_taxations_on_vehicle_id")
+}
+
+model third_party_logs {
+  id          BigInt   @id @default(autoincrement())
+  target_type String?  @db.VarChar
+  target_id   BigInt?
+  response    Json?
+  created_at  DateTime @db.Timestamp(6)
+  updated_at  DateTime @db.Timestamp(6)
+
+  @@index([target_type, target_id], map: "index_third_party_logs_on_target")
+}
+
+model user_helper_units {
+  id             BigInt       @id @default(autoincrement())
+  user_id        BigInt
+  helper_unit_id BigInt
+  created_at     DateTime     @db.Timestamp(6)
+  updated_at     DateTime     @db.Timestamp(6)
+  users          users        @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_812adc298b")
+  helper_units   helper_units @relation(fields: [helper_unit_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_ec18ad9908")
+
+  @@unique([user_id, helper_unit_id], map: "index_user_helper_units_on_user_id_and_helper_unit_id")
+  @@index([helper_unit_id], map: "index_user_helper_units_on_helper_unit_id")
+  @@index([user_id], map: "index_user_helper_units_on_user_id")
+}
+
+model users {
+  id                     BigInt                   @id @default(autoincrement())
+  full_name              String?                  @db.VarChar
+  username               String?                  @unique(map: "index_users_on_username") @db.VarChar
+  password_digest        String?                  @db.VarChar
+  phone_number           String?                  @unique(map: "index_users_on_phone_number") @db.VarChar
+  login_token            String?                  @db.VarChar
+  created_at             DateTime                 @db.Timestamp(6)
+  updated_at             DateTime                 @db.Timestamp(6)
+  management_unit_id     BigInt?
+  deleted_at             DateTime?                @db.Timestamp(6)
+  permission_assignments permission_assignments[]
+  tax_transactions       tax_transactions[]
+  taxations              taxations[]
+  user_helper_units      user_helper_units[]
+  management_units       management_units?        @relation(fields: [management_unit_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_d18ed91429")
+
+  @@index([deleted_at], map: "index_users_on_deleted_at")
+  @@index([management_unit_id], map: "index_users_on_management_unit_id")
+}
+
+model vehicle_brands {
+  id            BigInt          @id @default(autoincrement())
+  code          String?         @db.VarChar
+  name          String?         @db.VarChar
+  deleted_at    DateTime?       @db.Timestamp(6)
+  created_at    DateTime        @db.Timestamp(6)
+  updated_at    DateTime        @db.Timestamp(6)
+  vehicle_taxes vehicle_taxes[]
+  vehicles      vehicles[]
+
+  @@index([code], map: "index_vehicle_brands_on_code")
+  @@index([deleted_at], map: "index_vehicle_brands_on_deleted_at")
+}
+
+model vehicle_categories {
+  id                       BigInt               @id @default(autoincrement())
+  code                     String?              @db.VarChar
+  name                     String?              @db.VarChar
+  parent_id                BigInt?
+  created_at               DateTime             @db.Timestamp(6)
+  updated_at               DateTime             @db.Timestamp(6)
+  deleted_at               DateTime?            @db.Timestamp(6)
+  vehicle_categories       vehicle_categories?  @relation("vehicle_categoriesTovehicle_categories", fields: [parent_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_6a0af9638b")
+  other_vehicle_categories vehicle_categories[] @relation("vehicle_categoriesTovehicle_categories")
+  vehicle_taxes            vehicle_taxes[]
+  vehicles                 vehicles[]
+
+  @@index([code], map: "index_vehicle_categories_on_code")
+  @@index([deleted_at], map: "index_vehicle_categories_on_deleted_at")
+  @@index([parent_id], map: "index_vehicle_categories_on_parent_id")
+}
+
+model vehicle_fuels {
+  id         BigInt     @id @default(autoincrement())
+  name       String?    @db.VarChar
+  created_at DateTime   @db.Timestamp(6)
+  updated_at DateTime   @db.Timestamp(6)
+  deleted_at DateTime?  @db.Timestamp(6)
+  vehicles   vehicles[]
+
+  @@index([deleted_at], map: "index_vehicle_fuels_on_deleted_at")
+}
+
+model vehicle_functionalities {
+  id         BigInt     @id @default(autoincrement())
+  name       String?    @db.VarChar
+  created_at DateTime   @db.Timestamp(6)
+  updated_at DateTime   @db.Timestamp(6)
+  deleted_at DateTime?  @db.Timestamp(6)
+  vehicles   vehicles[]
+
+  @@index([deleted_at], map: "index_vehicle_functionalities_on_deleted_at")
+}
+
+model vehicle_license_colors {
+  id                         BigInt                       @id @default(autoincrement())
+  code                       String?                      @db.VarChar
+  name                       String?                      @db.VarChar
+  deleted_at                 DateTime?                    @db.Timestamp(6)
+  created_at                 DateTime                     @db.Timestamp(6)
+  updated_at                 DateTime                     @db.Timestamp(6)
+  permit_route_status        String?                      @db.VarChar
+  formulas                   formulas[]
+  tax_amnesty_license_colors tax_amnesty_license_colors[]
+  vehicles                   vehicles[]
+
+  @@index([deleted_at], map: "index_vehicle_license_colors_on_deleted_at")
+}
+
+model vehicle_models {
+  id         BigInt     @id @default(autoincrement())
+  name       String?    @db.VarChar
+  deleted_at DateTime?  @db.Timestamp(6)
+  created_at DateTime   @db.Timestamp(6)
+  updated_at DateTime   @db.Timestamp(6)
+  vehicles   vehicles[]
+
+  @@index([deleted_at], map: "index_vehicle_models_on_deleted_at")
+  @@index([name], map: "index_vehicle_models_on_name")
+}
+
+model vehicle_owner_occupations {
+  id         BigInt     @id @default(autoincrement())
+  name       String?    @db.VarChar
+  deleted_at DateTime?  @db.Timestamp(6)
+  created_at DateTime   @db.Timestamp(6)
+  updated_at DateTime   @db.Timestamp(6)
+  vehicles   vehicles[]
+
+  @@index([deleted_at], map: "index_vehicle_owner_occupations_on_deleted_at")
+}
+
+model vehicle_ownership_statuses {
+  id         BigInt     @id @default(autoincrement())
+  name       String?    @db.VarChar
+  created_at DateTime   @db.Timestamp(6)
+  updated_at DateTime   @db.Timestamp(6)
+  deleted_at DateTime?  @db.Timestamp(6)
+  vehicles   vehicles[]
+
+  @@index([deleted_at], map: "index_vehicle_ownership_statuses_on_deleted_at")
+}
+
+model vehicle_taxes {
+  id                         BigInt              @id @default(autoincrement())
+  year_created               Int?
+  vehicle_sell_price         BigInt?
+  weight                     Float?
+  vehicle_tax_base           BigInt?
+  base_year_of_tax           Int?
+  white_license_tax          Int?
+  penalty_white_license_tax  Int?
+  yellow_license_tax         Int?
+  penalty_yellow_license_tax Int?
+  red_license_tax            Int?
+  penalty_red_license_tax    Int?
+  deleted_at                 DateTime?           @db.Timestamp(6)
+  created_at                 DateTime            @db.Timestamp(6)
+  updated_at                 DateTime            @db.Timestamp(6)
+  brand_id                   BigInt?
+  vehicle_type               String?             @db.VarChar
+  vehicle_type_code          String?             @db.VarChar
+  country_id                 BigInt?
+  category_id                BigInt?
+  taxations                  taxations[]
+  vehicle_categories         vehicle_categories? @relation(fields: [category_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_10e94cbe37")
+  vehicle_brands             vehicle_brands?     @relation(fields: [brand_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_ce98facb9f")
+  countries                  countries?          @relation(fields: [country_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_fb50163e8b")
+
+  @@index([brand_id], map: "index_vehicle_taxes_on_brand_id")
+  @@index([category_id], map: "index_vehicle_taxes_on_category_id")
+  @@index([country_id], map: "index_vehicle_taxes_on_country_id")
+  @@index([deleted_at], map: "index_vehicle_taxes_on_deleted_at")
+}
+
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
+model vehicles {
+  id                                                                           BigInt                      @id @default(autoincrement())
+  owner_name                                                                   String?                     @db.VarChar
+  owner_identifier                                                             String?                     @db.VarChar
+  owner_address                                                                String?                     @db.VarChar
+  owner_email                                                                  String?                     @db.VarChar
+  owner_gender                                                                 String?                     @db.VarChar
+  owner_phone_number                                                           String?                     @db.VarChar
+  registration_no                                                              String?                     @db.VarChar
+  neighborhood_no                                                              String?                     @db.VarChar
+  local_community_no                                                           String?                     @db.VarChar
+  license_no                                                                   String?                     @db.VarChar
+  regency_id                                                                   BigInt?
+  district_id                                                                  BigInt?
+  subdistrict_id                                                               BigInt?
+  vehicle_type                                                                 String?                     @db.VarChar
+  skeleton_no                                                                  String?                     @db.VarChar
+  engine_no                                                                    String?                     @db.VarChar
+  certificate_no                                                               String?                     @db.VarChar
+  cyclinder                                                                    String?                     @db.VarChar
+  year_created                                                                 String?                     @db.VarChar
+  color                                                                        String?                     @db.VarChar
+  invoice_no                                                                   String?                     @db.VarChar
+  invoice_date                                                                 DateTime?                   @db.Date
+  taxable_date                                                                 DateTime?                   @db.Date
+  registration_date                                                            DateTime?                   @db.Date
+  license_start_date                                                           DateTime?                   @db.Date
+  license_end_date                                                             DateTime?                   @db.Date
+  license_color_id                                                             BigInt?
+  brand_id                                                                     BigInt?
+  category_id                                                                  BigInt?
+  model_id                                                                     BigInt?
+  fuel_id                                                                      BigInt?
+  functionality_id                                                             BigInt?
+  owner_occupation_id                                                          BigInt?
+  ownership_status_id                                                          BigInt?
+  insurance_mandatory_contribution_id                                          BigInt?
+  insurance_vehicle_type_id                                                    BigInt?
+  management_unit_id                                                           BigInt?
+  created_at                                                                   DateTime                    @db.Timestamp(6)
+  updated_at                                                                   DateTime                    @db.Timestamp(6)
+  blocked_at                                                                   DateTime?                   @db.Timestamp(6)
+  block_note                                                                   String?                     @db.VarChar
+  mutation_owner_name                                                          String?                     @db.VarChar
+  mutation_owner_address                                                       String?                     @db.VarChar
+  mutation_owner_identifier                                                    String?                     @db.VarChar
+  mutation_external_destination_id                                             BigInt?
+  mutation_internal_destination_id                                             BigInt?
+  status                                                                       String?                     @default("Aktif") @db.VarChar
+  fiskal_no                                                                    String?                     @db.VarChar
+  tax_transactions                                                             tax_transactions[]
+  taxations                                                                    taxations[]
+  regencies_vehicles_regency_idToregencies                                     regencies?                  @relation("vehicles_regency_idToregencies", fields: [regency_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_1dc881b869")
+  management_units_vehicles_mutation_internal_destination_idTomanagement_units management_units?           @relation("vehicles_mutation_internal_destination_idTomanagement_units", fields: [mutation_internal_destination_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_217dbffcb5")
+  insurances_vehicles_insurance_mandatory_contribution_idToinsurances          insurances?                 @relation("vehicles_insurance_mandatory_contribution_idToinsurances", fields: [insurance_mandatory_contribution_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_26fe1d603b")
+  regencies_vehicles_mutation_external_destination_idToregencies               regencies?                  @relation("vehicles_mutation_external_destination_idToregencies", fields: [mutation_external_destination_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_2ee946023f")
+  vehicle_owner_occupations                                                    vehicle_owner_occupations?  @relation(fields: [owner_occupation_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_3182ddafee")
+  vehicle_license_colors                                                       vehicle_license_colors?     @relation(fields: [license_color_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_63f5d01d57")
+  insurances_vehicles_insurance_vehicle_type_idToinsurances                    insurances?                 @relation("vehicles_insurance_vehicle_type_idToinsurances", fields: [insurance_vehicle_type_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_8494964aa6")
+  districts                                                                    districts?                  @relation(fields: [district_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_84d7d544e7")
+  vehicle_models                                                               vehicle_models?             @relation(fields: [model_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_9f0420da42")
+  management_units_vehicles_management_unit_idTomanagement_units               management_units?           @relation("vehicles_management_unit_idTomanagement_units", fields: [management_unit_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_ac7c573eab")
+  vehicle_brands                                                               vehicle_brands?             @relation(fields: [brand_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_b414b18027")
+  vehicle_fuels                                                                vehicle_fuels?              @relation(fields: [fuel_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_ba9c1fba2d")
+  vehicle_functionalities                                                      vehicle_functionalities?    @relation(fields: [functionality_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_c8b6666d01")
+  vehicle_categories                                                           vehicle_categories?         @relation(fields: [category_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_d8ccb3821d")
+  vehicle_ownership_statuses                                                   vehicle_ownership_statuses? @relation(fields: [ownership_status_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_dcd2f0cc56")
+  subdistricts                                                                 subdistricts?               @relation(fields: [subdistrict_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rails_e481690b34")
+
+  @@index([brand_id], map: "index_vehicles_on_brand_id")
+  @@index([category_id], map: "index_vehicles_on_category_id")
+  @@index([district_id], map: "index_vehicles_on_district_id")
+  @@index([fuel_id], map: "index_vehicles_on_fuel_id")
+  @@index([functionality_id], map: "index_vehicles_on_functionality_id")
+  @@index([insurance_mandatory_contribution_id], map: "index_vehicles_on_insurance_mandatory_contribution_id")
+  @@index([insurance_vehicle_type_id], map: "index_vehicles_on_insurance_vehicle_type_id")
+  @@index([license_color_id], map: "index_vehicles_on_license_color_id")
+  @@index([license_end_date], map: "index_vehicles_on_license_end_date")
+  @@index([management_unit_id], map: "index_vehicles_on_management_unit_id")
+  @@index([model_id], map: "index_vehicles_on_model_id")
+  @@index([mutation_external_destination_id], map: "index_vehicles_on_mutation_external_destination_id")
+  @@index([mutation_internal_destination_id], map: "index_vehicles_on_mutation_internal_destination_id")
+  @@index([owner_occupation_id], map: "index_vehicles_on_owner_occupation_id")
+  @@index([ownership_status_id], map: "index_vehicles_on_ownership_status_id")
+  @@index([regency_id], map: "index_vehicles_on_regency_id")
+  @@index([subdistrict_id], map: "index_vehicles_on_subdistrict_id")
+  @@index([license_no(ops: raw("gin_trgm_ops"))], map: "license_no_gin_idx", type: Gin)
+  @@index([owner_name(ops: raw("gin_trgm_ops"))], map: "owner_name_gin_idx", type: Gin)
+  @@index([skeleton_no(ops: raw("gin_trgm_ops"))], map: "skeleton_no_gin_idx", type: Gin)
+}
+
+model versions {
+  id             BigInt    @id @default(autoincrement())
+  item_type      String    @db.VarChar
+  item_id        BigInt
+  event          String    @db.VarChar
+  whodunnit      String?   @db.VarChar
+  object         Json?
+  object_changes Json?
+  created_at     DateTime? @db.Timestamp(6)
+
+  @@index([item_type, item_id], map: "index_versions_on_item_type_and_item_id")
+}

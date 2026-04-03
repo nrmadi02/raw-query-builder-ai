@@ -9,10 +9,12 @@ import { ModelSelector } from "@/components/model-selector";
 import { useAppStore } from "@/store/app-store";
 
 const EXAMPLE_PROMPTS = [
-  "Tampilkan semua produk beserta stoknya",
-  "Total pendapatan per kategori produk",
-  "Daftar pesanan dengan status pending",
-  "Produk terlaris bulan ini",
+  "Tampilkan 10 kendaraan dengan pajak tertinggi",
+  "Total pendapatan pajak bulan ini per kabupaten",
+  "Daftar kendaraan dengan pajak jatuh tempo",
+  "Cari kendaraan dengan nomor polisi DA",
+  "Ranking kasir dengan transaksi terbanyak",
+  "Distribusi kendaraan berdasarkan warna plat",
 ];
 
 interface PromptPanelProps {
@@ -72,7 +74,7 @@ export function PromptPanel({ loading, onSubmit }: PromptPanelProps) {
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Contoh: Berapa total penjualan per pengguna bulan ini?"
+              placeholder="Contoh: Tampilkan total pajak kendaraan bulan ini per kabupaten..."
               rows={6}
               className="resize-none text-sm leading-relaxed"
             />

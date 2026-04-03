@@ -71,7 +71,7 @@ export default function Home() {
         </div>
         <div className="h-4 w-px bg-border" />
         <span className="text-xs text-muted-foreground">
-          Natural Language → SQL → Data
+          Sistem pajak kendaraan bermotor
         </span>
         <div className="flex-1" />
         {loading && (

@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
-import { buildSystemPrompt } from "@/services/prompt-builder";
+import { buildSystemPrompt, buildTableSelectionPrompt, type DatabaseType } from "@/services/prompt-builder";
 import { schemaExtractor } from "@/services/schema-extractor";
+import { querySchemaExtractor } from "@/services/query-schema-extractor";
 import { PYTHON_BACKEND_URL } from "@/lib/config";
 
 export async function POST(req: Request) {
   try {
-    const { messages, model } = await req.json();
+    const { messages, model, database = "local" } = await req.json();
     const selectedModel = model || "gemini/gemini-2.0-flash";
+    const selectedDatabase: DatabaseType = database === "remote" ? "remote" : "local";
     const lastUserMessage = messages[messages.length - 1]?.content;
 
     if (!lastUserMessage) {
@@ -17,7 +19,9 @@ export async function POST(req: Request) {
     }
 
     // ── STEP 0: Validasi konteks pertanyaan ──
-    const validation = schemaExtractor.validateContext(lastUserMessage);
+    const validation = selectedDatabase === "remote"
+      ? querySchemaExtractor.validateContext(lastUserMessage)
+      : schemaExtractor.validateContext(lastUserMessage);
 
     if (!validation.isValid) {
       return NextResponse.json({
@@ -45,9 +49,39 @@ export async function POST(req: Request) {
         : "",
     );
 
-    const systemPrompt = buildSystemPrompt(lastUserMessage);
+    // ── STEP 1: Select relevant tables (Two-Step LLM) ──
+    let selectedTables: string[] | undefined;
 
-    // ── STEP 1: Generate SQL queries dari AI ──
+    if (selectedDatabase === "remote") {
+      try {
+        const tableSelectionPrompt = buildTableSelectionPrompt(lastUserMessage);
+        const selectRes = await fetch(`${PYTHON_BACKEND_URL}/api/select-tables`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: [
+              { role: "system", content: tableSelectionPrompt },
+              { role: "user", content: lastUserMessage },
+            ],
+            model: selectedModel,
+          }),
+        });
+
+        if (selectRes.ok) {
+          const selectResult = await selectRes.json();
+          selectedTables = selectResult.tables;
+          console.log(`[Table Selection] ✓ Selected ${selectedTables?.length || 0} tables:`, selectedTables);
+        } else {
+          console.warn("[Table Selection] ✗ Failed, using full schema as fallback");
+        }
+      } catch (err) {
+        console.warn("[Table Selection] ✗ Error, using full schema as fallback:", err);
+      }
+    }
+
+    const systemPrompt = buildSystemPrompt(lastUserMessage, selectedDatabase, selectedTables);
+
+    // ── STEP 2: Generate SQL queries dari AI ──
     const pythonBackendRes = await fetch(`${PYTHON_BACKEND_URL}/api/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

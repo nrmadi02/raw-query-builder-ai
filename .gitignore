@@ -21,3 +21,5 @@ tsconfig.tsbuildinfo
 
 # Cache
 .ruff_cache/
+
+src/generated/query-client

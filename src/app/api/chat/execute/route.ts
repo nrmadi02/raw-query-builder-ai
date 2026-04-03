@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 import { validateSQL } from "@/services/sql-guard";
 import { prisma } from "@/services/db";
+import { queryPrisma } from "@/services/query-db";
 import type { PaginationInfo } from "@/types";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { sql, page = 1, pageSize = 10 } = body;
+    const { sql, page = 1, pageSize = 10, database = "local" } = body;
+
+    // Select database based on parameter
+    const db = database === "remote" ? queryPrisma : prisma;
 
     if (!sql || typeof sql !== "string" || sql.trim() === "") {
       return NextResponse.json(
@@ -33,7 +37,7 @@ export async function POST(req: Request) {
 
     // Get total count
     const startCount = performance.now();
-    const countResult = await prisma.$queryRawUnsafe(
+    const countResult = await db.$queryRawUnsafe(
       `SELECT COUNT(*) as total FROM (${baseSql}) AS subquery`,
     );
     const countTimeMs =
@@ -45,7 +49,7 @@ export async function POST(req: Request) {
     // Execute paginated query
     const start = performance.now();
     const paginatedSql = `${baseSql} LIMIT ${pageSizeNum} OFFSET ${offset}`;
-    const rawRows = await prisma.$queryRawUnsafe(paginatedSql);
+    const rawRows = await db.$queryRawUnsafe(paginatedSql);
     const executionTimeMs = Math.round((performance.now() - start) * 100) / 100;
 
     // Serialize BigInt values
