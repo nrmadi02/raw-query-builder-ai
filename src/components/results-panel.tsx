@@ -35,10 +35,8 @@ export function ResultsPanel({
 
   const totalRows = useMemo(
     () =>
-      response?.queries?.reduce(
-        (sum, q) => sum + (q.rows?.length ?? 0),
-        0,
-      ) ?? 0,
+      response?.queries?.reduce((sum, q) => sum + (q.rows?.length ?? 0), 0) ??
+      0,
     [response?.queries],
   );
 
@@ -91,7 +89,7 @@ export function ResultsPanel({
                 <p className="text-sm font-medium text-destructive">
                   Terjadi Kesalahan
                 </p>
-                <p className="text-xs text-muted-foreground break-words">
+                <p className="text-xs text-muted-foreground wrap-break-word">
                   {error}
                 </p>
               </div>

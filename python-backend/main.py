@@ -103,6 +103,9 @@ def normalize_response(structured_data: dict) -> dict:
 @app.post("/api/generate")
 async def generate_sql(req: GenerateRequest):
     try:
+        # Log model yang diterima
+        print(f"[Generate API] Model received: {req.model}")
+
         # Konversi Pydantic List[Message] ke list of dicts yang diharapkan oleh litellm
         messages_dict = [
             {"role": msg.role, "content": msg.content} for msg in req.messages
@@ -113,7 +116,7 @@ async def generate_sql(req: GenerateRequest):
             "gemini/gemini-2.0-flash-exp",  # Free, Google AI Studio
             "gemini/gemini-1.5-flash-latest",  # Free, Google AI Studio (lebih stabil)
             "groq/llama-3.3-70b-versatile",  # Free, Groq
-            "claude-3-5-sonnet-20240620",  # Paid, Anthropic
+            "anthropic/claude-3-5-sonnet-20240620",  # Paid, Anthropic
         ]
         # Hapus model primer dari fallback agar tidak duplikat
         fallback_models = [m for m in fallback_models if m != req.model]

@@ -9,6 +9,13 @@ export interface Model {
 
 export type QueryStatus = "pending" | "executing" | "completed" | "error";
 
+export interface PaginationInfo {
+  page: number;
+  pageSize: number;
+  totalRows: number;
+  totalPages: number;
+}
+
 export interface QueryResult {
   title: string;
   sql: string;
@@ -19,6 +26,7 @@ export interface QueryResult {
   validationError?: string;
   executionTimeMs?: number;
   status?: QueryStatus;
+  pagination?: PaginationInfo;
 }
 
 export interface AIResponse {

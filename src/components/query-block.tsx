@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import {
   AlertCircle,
   CheckCircle2,
@@ -23,8 +23,12 @@ import { cn } from "@/lib/utils";
 import ChartRenderer from "@/components/chart-renderer";
 import { exportToCSV, exportToExcel } from "@/lib/export";
 import type { QueryResult } from "@/types";
+import {
+  useQueryExecution,
+  useQueryMutation,
+} from "@/hooks/use-query-execution";
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 10;
 
 export function QueryBlock({
   query: initialQuery,
@@ -39,14 +43,23 @@ export function QueryBlock({
   const [editedSQL, setEditedSQL] = useState(query.sql);
   const [copiedSQL, setCopiedSQL] = useState(false);
   const [copiedData, setCopiedData] = useState(false);
-  const [reRunning, setReRunning] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const hasLocalEdit = useRef(false);
 
-  // Sync local state when parent query changes (e.g., rows, status after execution)
-  // Skip sync if user has done a local edit/re-run
+  // Use React Query for query execution with pagination
+  const {
+    data: queryData,
+    isLoading: pageLoading,
+    error: queryError,
+  } = useQueryExecution(query.sql, currentPage, PAGE_SIZE, {
+    enabled: query.status !== "pending" && query.status !== "executing",
+  });
+
+  // Use React Query for re-running queries
+  const mutation = useQueryMutation();
+
+  // Sync local state when parent query changes
   useEffect(() => {
-    // Reset local edit flag when parent sends a fresh query
     if (initialQuery.status === "pending") {
       hasLocalEdit.current = false;
     }
@@ -55,11 +68,47 @@ export function QueryBlock({
       initialQuery.status !== query.status ||
       initialQuery.rows !== query.rows ||
       initialQuery.executionTimeMs !== query.executionTimeMs ||
-      initialQuery.queryError !== query.queryError
+      initialQuery.queryError !== query.queryError ||
+      initialQuery.pagination !== query.pagination
     ) {
       setQuery(initialQuery);
+      setCurrentPage(1);
     }
-  }, [initialQuery.status, initialQuery.rows, initialQuery.executionTimeMs, initialQuery.queryError, query.status, query.rows, query.executionTimeMs, query.queryError]);
+  }, [
+    initialQuery.status,
+    initialQuery.rows,
+    initialQuery.executionTimeMs,
+    initialQuery.queryError,
+    initialQuery.pagination,
+    query.status,
+    query.rows,
+    query.executionTimeMs,
+    query.queryError,
+    query.pagination,
+  ]);
+
+  // Update query when React Query data changes
+  useEffect(() => {
+    if (queryData && !hasLocalEdit.current) {
+      setQuery((prev) => ({
+        ...prev,
+        rows: queryData.rows,
+        columns: queryData.columns || prev.columns,
+        executionTimeMs: queryData.executionTimeMs,
+        pagination: queryData.pagination,
+      }));
+    }
+  }, [queryData]);
+
+  // Update error state
+  useEffect(() => {
+    if (queryError) {
+      setQuery((prev) => ({
+        ...prev,
+        queryError: queryError.message,
+      }));
+    }
+  }, [queryError]);
 
   // Cleanup timeout refs
   const copiedSQLTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -71,15 +120,13 @@ export function QueryBlock({
     };
   }, []);
 
-  const totalPages = useMemo(
-    () => (query.rows ? Math.ceil(query.rows.length / PAGE_SIZE) : 0),
-    [query.rows],
-  );
-  const paginatedRows = useMemo(
-    () =>
-      query.rows?.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
-    [query.rows, currentPage],
-  );
+  // Calculate pagination info from server response or fallback to client-side calculation
+  const totalPages =
+    query.pagination?.totalPages ??
+    (query.rows ? Math.ceil(query.rows.length / PAGE_SIZE) : 0);
+  const totalRows = query.pagination?.totalRows ?? query.rows?.length ?? 0;
+  const displayStart = totalRows > 0 ? (currentPage - 1) * PAGE_SIZE + 1 : 0;
+  const displayEnd = Math.min(currentPage * PAGE_SIZE, totalRows);
 
   const copySQL = async () => {
     await navigator.clipboard.writeText(query.sql);
@@ -126,39 +173,37 @@ export function QueryBlock({
   };
 
   const handleReRun = async () => {
-    setReRunning(true);
-    try {
-      const res = await fetch("/api/chat/execute", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sql: editedSQL }),
-      });
-      const data = await res.json();
-      if (data.error) {
-        setQuery({
-          ...query,
-          sql: editedSQL,
-          rows: [],
-          queryError: data.error,
-        });
-      } else {
-        setQuery({
-          ...query,
-          sql: editedSQL,
-          rows: data.rows,
-          queryError: null,
-          executionTimeMs: data.executionTimeMs,
-        });
-      }
-      setEditingSQL(false);
-      setCurrentPage(1);
-      hasLocalEdit.current = true;
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Gagal menjalankan query";
-      setQuery({ ...query, sql: editedSQL, rows: [], queryError: message });
-    }
-    setReRunning(false);
+    mutation.mutate(
+      {
+        sql: editedSQL,
+        page: 1,
+        pageSize: PAGE_SIZE,
+      },
+      {
+        onSuccess: (data) => {
+          setQuery({
+            ...query,
+            sql: editedSQL,
+            rows: data.rows,
+            columns: data.columns || query.columns,
+            executionTimeMs: data.executionTimeMs,
+            pagination: data.pagination,
+            queryError: null,
+          });
+          setEditingSQL(false);
+          setCurrentPage(1);
+          hasLocalEdit.current = true;
+        },
+        onError: (err) => {
+          setQuery({
+            ...query,
+            sql: editedSQL,
+            rows: [],
+            queryError: err.message,
+          });
+        },
+      },
+    );
   };
 
   return (
@@ -262,10 +307,10 @@ export function QueryBlock({
                     <Button
                       size="sm"
                       onClick={handleReRun}
-                      disabled={reRunning || !editedSQL.trim()}
+                      disabled={mutation.isPending || !editedSQL.trim()}
                       className="gap-1 text-xs"
                     >
-                      {reRunning ? (
+                      {mutation.isPending ? (
                         "Menjalankan..."
                       ) : (
                         <>
@@ -360,6 +405,19 @@ export function QueryBlock({
           </div>
         )}
 
+        {/* Page loading state */}
+        {pageLoading &&
+          !query.queryError &&
+          query.status !== "pending" &&
+          query.status !== "executing" && (
+            <div className="rounded-lg border bg-blue-50/50 dark:bg-blue-950/20 p-3 flex gap-2.5">
+              <Loader2 className="w-4 h-4 text-blue-600 dark:text-blue-400 animate-spin shrink-0 mt-0.5" />
+              <p className="text-sm text-blue-600 dark:text-blue-400">
+                Memuat halaman...
+              </p>
+            </div>
+          )}
+
         {/* Chart Visualization */}
         {query.chartType &&
           query.chartType !== "table" &&
@@ -374,9 +432,14 @@ export function QueryBlock({
             {/* Table toolbar */}
             <div className="flex items-center justify-between">
               <div className="text-xs text-muted-foreground">
-                Menampilkan {(currentPage - 1) * PAGE_SIZE + 1}-
-                {Math.min(currentPage * PAGE_SIZE, query.rows.length)} dari{" "}
-                {query.rows.length} baris
+                {totalRows > 0 ? (
+                  <>
+                    Menampilkan {displayStart}-{displayEnd} dari {totalRows}{" "}
+                    baris
+                  </>
+                ) : (
+                  "Tidak ada data"
+                )}
               </div>
               <div className="flex items-center gap-1">
                 <button
@@ -427,7 +490,7 @@ export function QueryBlock({
                     </tr>
                   </thead>
                   <tbody>
-                    {paginatedRows?.map((row, i) => (
+                    {query.rows?.map((row, i) => (
                       <tr
                         key={i}
                         className={cn(
@@ -462,7 +525,7 @@ export function QueryBlock({
                 <button
                   type="button"
                   onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
+                  disabled={currentPage === 1 || pageLoading}
                   className="p-1 rounded hover:bg-muted disabled:opacity-30 disabled:pointer-events-none"
                 >
                   <ChevronLeft className="w-4 h-4" />
@@ -475,7 +538,7 @@ export function QueryBlock({
                   onClick={() =>
                     setCurrentPage((p) => Math.min(totalPages, p + 1))
                   }
-                  disabled={currentPage === totalPages}
+                  disabled={currentPage === totalPages || pageLoading}
                   className="p-1 rounded hover:bg-muted disabled:opacity-30 disabled:pointer-events-none"
                 >
                   <ChevronRight className="w-4 h-4" />

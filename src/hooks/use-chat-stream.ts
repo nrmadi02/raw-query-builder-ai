@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { AIResponse, Message, QueryResult } from "@/types";
 import { useAppStore } from "@/store/app-store";
 
-export function useStreamChat() {
+export function useChatStream() {
   const [response, setResponse] = useState<AIResponse | null>(null);
   const [streamingInsight, setStreamingInsight] = useState("");
   const [loading, setLoading] = useState(false);
@@ -18,6 +19,7 @@ export function useStreamChat() {
   const executeAbortRef = useRef<AbortController | null>(null);
 
   const addChatEntry = useAppStore((s) => s.addChatEntry);
+  const queryClient = useQueryClient();
 
   // Cleanup on unmount
   useEffect(() => {
@@ -147,10 +149,7 @@ export function useStreamChat() {
             pagination: result.pagination,
           };
         });
-        responseRef.current = {
-          ...responseRef.current,
-          queries: updatedQueries,
-        };
+        responseRef.current = { ...responseRef.current, queries: updatedQueries };
       }
 
       return results;
@@ -287,7 +286,7 @@ export function useStreamChat() {
             );
           }
           throw new Error(
-            (await res.text()) || "Terjadi kesalahan dari sisi server",
+            await res.text() || "Terjadi kesalahan dari sisi server",
           );
         }
 
@@ -357,7 +356,10 @@ export function useStreamChat() {
           currentResponse.queries.length > 0 &&
           !currentResponse.queries.some((q) => q.validationError)
         ) {
-          await executeQueries(currentResponse.queries, executeAbort.signal);
+          await executeQueries(
+            currentResponse.queries,
+            executeAbort.signal,
+          );
         }
 
         // Check if aborted during execution
@@ -392,6 +394,22 @@ export function useStreamChat() {
             response: responseRef.current,
             timestamp: Date.now(),
           });
+
+          // Prefetch first page of each query for React Query cache
+          responseRef.current.queries.forEach((query) => {
+            if (query.sql && !query.validationError) {
+              queryClient.prefetchQuery({
+                queryKey: ["queryExecution", query.sql, 1, 10],
+                queryFn: ({ signal }) =>
+                  fetch("/api/chat/execute", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ sql: query.sql, page: 1, pageSize: 10 }),
+                    signal,
+                  }).then((res) => res.json()),
+              });
+            }
+          });
         }
       } catch (err: unknown) {
         if (err instanceof DOMException && err.name === "AbortError") {
@@ -407,7 +425,7 @@ export function useStreamChat() {
         messagesRef.current = messagesRef.current.slice(0, -1);
       }
     },
-    [addChatEntry, executeQueries, generateInsight],
+    [addChatEntry, executeQueries, generateInsight, queryClient],
   );
 
   const reset = useCallback(() => {

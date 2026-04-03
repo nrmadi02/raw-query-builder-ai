@@ -42,7 +42,7 @@ export const MODEL_OPTIONS: { group: string; models: Model[] }[] = [
     group: "Paid",
     models: [
       {
-        id: "gpt-4o",
+        id: "openai/gpt-4o",
         label: "GPT-4o",
         provider: "OpenAI",
         badge: "PAID" as const,
@@ -50,7 +50,7 @@ export const MODEL_OPTIONS: { group: string; models: Model[] }[] = [
         note: "Paling akurat, tapi berbayar",
       },
       {
-        id: "claude-3-5-sonnet-20240620",
+        id: "anthropic/claude-3-5-sonnet-20240620",
         label: "Claude 3.5 Sonnet",
         provider: "Anthropic",
         badge: "PAID" as const,

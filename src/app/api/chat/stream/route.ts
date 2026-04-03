@@ -60,6 +60,11 @@ export async function POST(req: Request) {
 
     const systemPrompt = buildSystemPrompt(lastUserMessage);
 
+    console.log("[Stream Route] Sending to Python backend:", {
+      model: selectedModel,
+      userMessage: lastUserMessage?.substring(0, 50),
+    });
+
     const pythonBackendRes = await fetch(`${PYTHON_BACKEND_URL}/api/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

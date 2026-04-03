@@ -519,3 +519,31 @@ Setelah rancangan ini disetujui:
 2. Setup Docker Compose dengan LiteLLM + PostgreSQL
 3. Implementasi Phase 1 (foundation)
 4. Iterasi berdasarkan feedback
+
+   Setup database auth:
+
+   # Buat database baru
+
+   createdb ai_query_builder_auth
+
+   # Run migration
+
+   npx prisma migrate dev --schema=prisma/schema-auth.prisma --name init 2. Setup Google OAuth:
+   - Buka Google Cloud Console
+   - Buat project atau pilih yang ada
+   - Enable Google+ API
+   - Buat OAuth 2.0 credentials (Web application)
+   - Authorized redirect URI: http://localhost:3000/api/auth/callback/google
+   3. Generate secret:
+      openssl rand -base64 32
+   4. Test login flow:
+   - Jalankan npm run dev
+   - Akses http://localhost:3000
+   - Verifikasi redirect ke /login
+   - Klik "Login dengan Google"
+   - Complete Google OAuth flow
+   - Verifikasi redirect kembali ke /
+   - Verifikasi session aktif
+   5. Test logout:
+   - Klik tombol logout
+   - Verifikasi redirect ke /login

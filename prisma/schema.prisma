@@ -10,42 +10,91 @@ datasource db {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  name      String
-  email     String   @unique
-  role      String   @default("customer")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt      @map("updated_at")
-  
-  orders    Order[]
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified Boolean?
+  image         String?
+  role          String    @default("customer")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  // Auth relations
+  sessions Session[]
+  accounts Account[]
+
+  // App relations
+  orders Order[]
 
   @@map("users")
 }
 
+model Session {
+  id        String   @id
+  expiresAt DateTime @map("expires_at")
+  token     String   @unique
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("sessions")
+}
+
+model Account {
+  id                   String    @id
+  accountId            String    @map("account_id")
+  providerId           String    @map("provider_id")
+  userId               String    @map("user_id")
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken          String?   @map("access_token")
+  refreshToken         String?   @map("refresh_token")
+  idToken              String?   @map("id_token")
+  accessTokenExpiresAt DateTime? @map("access_token_expires_at")
+  scope                String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@map("accounts")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime @map("expires_at")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("verifications")
+}
+
 model Product {
-  id          Int      @id @default(autoincrement())
-  name        String
-  category    String
-  price       Float
-  stock       Int      @default(0)
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt      @map("updated_at")
-  
-  orderItems  OrderItem[]
+  id        Int      @id @default(autoincrement())
+  name      String
+  category  String
+  price     Float
+  stock     Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  orderItems OrderItem[]
 
   @@map("products")
 }
 
 model Order {
   id          Int      @id @default(autoincrement())
-  userId      Int      @map("user_id")
+  userId      String   @map("user_id")
   totalAmount Float    @map("total_amount")
   status      String   @default("pending")
   createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt      @map("updated_at")
-  
-  user        User      @relation(fields: [userId], references: [id])
-  orderItems  OrderItem[]
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user       User        @relation(fields: [userId], references: [id])
+  orderItems OrderItem[]
 
   @@map("orders")
 }
@@ -56,9 +105,9 @@ model OrderItem {
   productId Int   @map("product_id")
   quantity  Int
   unitPrice Float @map("unit_price")
-  
-  order     Order   @relation(fields: [orderId], references: [id])
-  product   Product @relation(fields: [productId], references: [id])
+
+  order   Order   @relation(fields: [orderId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
 
   @@map("order_items")
 }

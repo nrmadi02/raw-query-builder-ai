@@ -46,9 +46,10 @@ def validate_and_format_sql(sql_str: str) -> str:
                 )
 
     # Tambahkan Limit Otomatis jika Root adalah Select dan tidak ada klausul Limit
+    # Note: Limit ini akan di-override oleh API pagination
     if not parsed.args.get("limit"):
-        # Menyertakan Limit 1000 records maksimal
-        parsed = parsed.limit(1000)
+        # Default limit untuk query tanpa pagination parameter
+        parsed = parsed.limit(10)
         
     # Kembalikan string SQL yang telah terverifikasi dan termutasi (menambahkan LIMIT)
     return parsed.sql(dialect=dialect)
