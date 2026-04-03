@@ -25,6 +25,7 @@ model User {
 
   // App relations
   orders Order[]
+  chatHistories ChatHistory[]
 
   @@map("users")
 }
@@ -110,4 +111,16 @@ model OrderItem {
   product Product @relation(fields: [productId], references: [id])
 
   @@map("order_items")
+}
+
+model ChatHistory {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  prompt    String   @db.Text
+  response  Json
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("chat_histories")
 }

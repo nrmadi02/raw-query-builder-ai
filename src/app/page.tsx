@@ -12,7 +12,9 @@ import { PromptPanel } from "@/components/prompt-panel";
 import { ResultsPanel } from "@/components/results-panel";
 import { ChatHistory } from "@/components/chat-history";
 import ThemeToggle from "@/components/theme-toggle";
+import { UserMenu } from "@/components/user-menu";
 import { useStreamChat } from "@/hooks/use-stream-chat";
+import { useChatHistory } from "@/hooks/use-chat-history";
 import { useAppStore, type ChatHistoryEntry } from "@/store/app-store";
 
 export default function Home() {
@@ -29,6 +31,7 @@ export default function Home() {
   } = useStreamChat();
   const selectedModel = useAppStore((s) => s.selectedModel);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const { refetch: refetchChatHistory } = useChatHistory();
 
   const handleSubmit = (prompt: string) => {
     submit(prompt, selectedModel);
@@ -84,6 +87,7 @@ export default function Home() {
           </Button>
         )}
         <ThemeToggle />
+        <UserMenu />
       </header>
 
       {/* Main Layout */}

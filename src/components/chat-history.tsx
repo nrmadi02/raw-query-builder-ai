@@ -3,6 +3,7 @@
 import { MessageSquare, Trash2, Clock } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAppStore, type ChatHistoryEntry } from "@/store/app-store";
+import { useChatHistory } from "@/hooks/use-chat-history";
 import { cn } from "@/lib/utils";
 
 interface ChatHistoryProps {
@@ -13,6 +14,7 @@ export function ChatHistory({ onSelect }: ChatHistoryProps) {
   const chatHistory = useAppStore((s) => s.chatHistory);
   const removeChatEntry = useAppStore((s) => s.removeChatEntry);
   const clearHistory = useAppStore((s) => s.clearHistory);
+  const { deleteFromDatabase, refetch } = useChatHistory();
 
   const formatTime = (ts: number) => {
     const d = new Date(ts);
@@ -30,6 +32,24 @@ export function ChatHistory({ onSelect }: ChatHistoryProps) {
     });
   };
 
+  const handleDelete = async (id: string) => {
+    // Delete from database
+    const success = await deleteFromDatabase(id);
+    if (success) {
+      // Remove from local store
+      removeChatEntry(id);
+    }
+  };
+
+  const handleClearAll = async () => {
+    // Delete all entries from database
+    for (const entry of chatHistory) {
+      await deleteFromDatabase(entry.id);
+    }
+    // Clear local store
+    clearHistory();
+  };
+
   if (chatHistory.length === 0) {
     return (
       <div className="p-3 text-center">
@@ -45,15 +65,17 @@ export function ChatHistory({ onSelect }: ChatHistoryProps) {
         <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
           Riwayat
         </span>
-        {chatHistory.length > 0 && (
-          <button
-            type="button"
-            onClick={clearHistory}
-            className="text-[10px] text-muted-foreground hover:text-destructive transition-colors"
-          >
-            Hapus Semua
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {chatHistory.length > 0 && (
+            <button
+              type="button"
+              onClick={handleClearAll}
+              className="text-[10px] text-muted-foreground hover:text-destructive transition-colors"
+            >
+              Hapus Semua
+            </button>
+          )}
+        </div>
       </div>
       <ScrollArea className="flex-1">
         <div className="p-1.5 space-y-0.5">
@@ -88,7 +110,7 @@ export function ChatHistory({ onSelect }: ChatHistoryProps) {
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  removeChatEntry(entry.id);
+                  handleDelete(entry.id);
                 }}
                 className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-muted transition-all"
               >

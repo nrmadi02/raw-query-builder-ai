@@ -386,12 +386,35 @@ export function useStreamChat() {
 
         // Save to chat history after everything is done
         if (responseRef.current) {
-          addChatEntry({
+          const entry = {
             id: crypto.randomUUID(),
             prompt,
             response: responseRef.current,
             timestamp: Date.now(),
-          });
+          };
+
+          // Save to database first
+          try {
+            const res = await fetch("/api/chat-history", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                prompt,
+                response: entry.response,
+              }),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              // Use the ID from database if available
+              entry.id = data.id;
+            }
+          } catch (err) {
+            console.error("Failed to save to database:", err);
+            // Continue with local save even if DB fails
+          }
+
+          // Then add to local store
+          addChatEntry(entry);
         }
       } catch (err: unknown) {
         if (err instanceof DOMException && err.name === "AbortError") {
