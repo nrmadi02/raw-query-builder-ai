@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { prompt, response } = body;
+    const { prompt, response, conversationId } = body;
 
     if (!prompt || !response) {
       return NextResponse.json(
@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
         userId: session.user.id,
         prompt,
         response,
+        conversationId: conversationId || null,
       },
     });
 

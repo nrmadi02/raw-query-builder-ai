@@ -26,6 +26,7 @@ model User {
   // App relations
   orders Order[]
   chatHistories ChatHistory[]
+  conversations Conversation[]
 
   @@map("users")
 }
@@ -113,14 +114,33 @@ model OrderItem {
   @@map("order_items")
 }
 
-model ChatHistory {
-  id        String   @id @default(cuid())
-  userId    String   @map("user_id")
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  prompt    String   @db.Text
-  response  Json
-  createdAt DateTime @default(now()) @map("created_at")
+model Conversation {
+  id        String        @id @default(cuid())
+  userId    String        @map("user_id")
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String        @db.Text
+  turns     Json
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  chatHistories ChatHistory[]
 
   @@index([userId])
+  @@map("conversations")
+}
+
+model ChatHistory {
+  id             String        @id @default(cuid())
+  userId         String        @map("user_id")
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversationId String?       @map("conversation_id")
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  prompt         String        @db.Text
+  response       Json
+  turnIndex      Int           @default(0) @map("turn_index")
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([conversationId])
   @@map("chat_histories")
 }

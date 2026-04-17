@@ -1,12 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { Cpu, Send, Loader2 } from "lucide-react";
+import {
+  Cpu,
+  Send,
+  Loader2,
+  Plus,
+  MessageSquare,
+  ChevronDown,
+  User,
+  Bot,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ModelSelector } from "@/components/model-selector";
-import { useAppStore } from "@/store/app-store";
+import type { ConversationTurn } from "@/types";
 
 const EXAMPLE_PROMPTS = [
   "Tampilkan 10 kendaraan dengan pajak tertinggi",
@@ -20,18 +28,25 @@ const EXAMPLE_PROMPTS = [
 interface PromptPanelProps {
   loading: boolean;
   onSubmit: (prompt: string) => void;
+  hasConversation?: boolean;
+  onNewConversation?: () => void;
+  conversationTurns?: ConversationTurn[];
 }
 
-export function PromptPanel({ loading, onSubmit }: PromptPanelProps) {
+export function PromptPanel({
+  loading,
+  onSubmit,
+  hasConversation = false,
+  onNewConversation,
+  conversationTurns = [],
+}: PromptPanelProps) {
   const [prompt, setPrompt] = useState("");
-  const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
-  const selectedModel = useAppStore((s) => s.selectedModel);
-  const setSelectedModel = useAppStore((s) => s.setSelectedModel);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!prompt.trim()) return;
     onSubmit(prompt);
+    setPrompt("");
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -45,6 +60,13 @@ export function PromptPanel({ loading, onSubmit }: PromptPanelProps) {
     setPrompt(example);
   };
 
+  const handleNew = () => {
+    setPrompt("");
+    onNewConversation?.();
+  };
+
+  const userTurns = conversationTurns.filter((t) => t.role === "user");
+
   return (
     <div className="h-full flex flex-col border-r bg-background">
       {/* Panel Header */}
@@ -53,17 +75,85 @@ export function PromptPanel({ loading, onSubmit }: PromptPanelProps) {
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
           Prompt
         </span>
+        {hasConversation && (
+          <>
+            <div className="flex-1" />
+            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              <MessageSquare className="w-3 h-3" />
+              {userTurns.length} prompt
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleNew}
+              className="h-6 gap-1 text-[10px] text-muted-foreground hover:text-foreground px-1.5"
+            >
+              <Plus className="w-3 h-3" />
+              Baru
+            </Button>
+          </>
+        )}
       </div>
 
       <ScrollArea className="flex-1">
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5 p-4">
-          {/* Model Selector */}
-          <ModelSelector
-            selectedModel={selectedModel}
-            onSelect={setSelectedModel}
-            open={modelSelectorOpen}
-            onToggle={() => setModelSelectorOpen((v) => !v)}
-          />
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4 p-4">
+          {/* Conversation Turns — tampilkan semua Q&A */}
+          {conversationTurns.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                  Riwayat Percakapan
+                </span>
+                <span className="text-[9px] text-muted-foreground/50 ml-auto">
+                  {userTurns.length} pertanyaan
+                </span>
+              </div>
+              <div className="space-y-2 pl-1 border-l-2 border-muted max-h-64 overflow-y-auto pr-1">
+                {conversationTurns.map((turn) => (
+                  <div
+                    key={turn.id}
+                    className="flex items-start gap-2"
+                  >
+                    {/* Avatar icon */}
+                    <div
+                      className={`shrink-0 w-5 h-5 rounded-full flex items-center justify-center mt-0.5 ${
+                        turn.role === "user"
+                          ? "bg-primary/15 border border-primary/30"
+                          : "bg-amber-500/15 border border-amber-500/30"
+                      }`}
+                    >
+                      {turn.role === "user" ? (
+                        <User className="w-2.5 h-2.5 text-primary" />
+                      ) : (
+                        <Bot className="w-2.5 h-2.5 text-amber-500" />
+                      )}
+                    </div>
+
+                    {/* Bubble */}
+                    <div
+                      className={`flex-1 rounded-lg px-2.5 py-1.5 text-xs leading-relaxed border ${
+                        turn.role === "user"
+                          ? "bg-primary/5 border-primary/20 text-foreground/85"
+                          : "bg-amber-500/5 border-amber-500/20 text-muted-foreground"
+                      }`}
+                    >
+                      <span
+                        className={`block text-[9px] font-semibold uppercase tracking-wider mb-0.5 ${
+                          turn.role === "user"
+                            ? "text-primary/60"
+                            : "text-amber-500/70"
+                        }`}
+                      >
+                        {turn.role === "user" ? "Kamu" : "AI"}
+                      </span>
+                      <span className="line-clamp-3">{turn.content}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Prompt Textarea */}
           <div className="space-y-2">
@@ -74,7 +164,11 @@ export function PromptPanel({ loading, onSubmit }: PromptPanelProps) {
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Contoh: Tampilkan total pajak kendaraan bulan ini per kabupaten..."
+              placeholder={
+                hasConversation
+                  ? "Tanya follow-up atau masukkan pertanyaan baru..."
+                  : "Contoh: Tampilkan total pajak kendaraan bulan ini per kabupaten..."
+              }
               rows={6}
               className="resize-none text-sm leading-relaxed"
             />

@@ -28,12 +28,14 @@ export function InsightCard({
           </span>
         )}
       </div>
-      <p className="text-sm text-amber-900/80 dark:text-amber-100/80 leading-relaxed">
-        {insight}
-        {isStreaming && (
-          <span className="inline-block w-1 h-4 bg-amber-500 ml-0.5 animate-pulse" />
-        )}
-      </p>
+      <div className="max-h-40 overflow-y-auto">
+        <p className="text-sm text-amber-900/80 dark:text-amber-100/80 leading-relaxed">
+          {insight}
+          {isStreaming && (
+            <span className="inline-block w-1 h-4 bg-amber-500 ml-0.5 animate-pulse" />
+          )}
+        </p>
+      </div>
     </div>
   );
 }

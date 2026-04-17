@@ -2,7 +2,7 @@ import { PYTHON_BACKEND_URL } from "@/lib/config";
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    const { model, ...body } = await req.json();
 
     const pythonRes = await fetch(`${PYTHON_BACKEND_URL}/api/insight-stream`, {
       method: "POST",

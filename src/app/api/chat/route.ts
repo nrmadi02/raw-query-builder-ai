@@ -1,15 +1,20 @@
 import { NextResponse } from "next/server";
-import { buildSystemPrompt, buildTableSelectionPrompt, type DatabaseType } from "@/services/prompt-builder";
+import { buildSystemPrompt, buildTableSelectionPrompt, buildConversationContext, type DatabaseType } from "@/services/prompt-builder";
 import { schemaExtractor } from "@/services/schema-extractor";
 import { querySchemaExtractor } from "@/services/query-schema-extractor";
 import { PYTHON_BACKEND_URL } from "@/lib/config";
+import type { ConversationTurn, Message } from "@/types";
 
 export async function POST(req: Request) {
   try {
-    const { messages, model, database = "local" } = await req.json();
-    const selectedModel = model || "gemini/gemini-2.0-flash";
+    const { messages, database = "local", conversationTurns = [] } = (await req.json()) as {
+      messages: Message[];
+      database?: DatabaseType;
+      conversationTurns?: ConversationTurn[];
+    };
     const selectedDatabase: DatabaseType = database === "remote" ? "remote" : "local";
     const lastUserMessage = messages[messages.length - 1]?.content;
+    const convContext = buildConversationContext(conversationTurns);
 
     if (!lastUserMessage) {
       return NextResponse.json(
@@ -63,7 +68,6 @@ export async function POST(req: Request) {
               { role: "system", content: tableSelectionPrompt },
               { role: "user", content: lastUserMessage },
             ],
-            model: selectedModel,
           }),
         });
 
@@ -79,18 +83,21 @@ export async function POST(req: Request) {
       }
     }
 
-    const systemPrompt = buildSystemPrompt(lastUserMessage, selectedDatabase, selectedTables);
+    const systemPrompt = buildSystemPrompt(lastUserMessage, selectedDatabase, selectedTables, convContext);
+
+    // Build message history for LLM
+    const historyMessages: Message[] = [{ role: "system", content: systemPrompt }];
+    for (const turn of conversationTurns.slice(-6)) {
+      historyMessages.push({ role: turn.role, content: turn.content });
+    }
+    historyMessages.push({ role: "user", content: lastUserMessage });
 
     // ── STEP 2: Generate SQL queries dari AI ──
     const pythonBackendRes = await fetch(`${PYTHON_BACKEND_URL}/api/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: lastUserMessage },
-        ],
-        model: selectedModel,
+        messages: historyMessages,
       }),
     });
 

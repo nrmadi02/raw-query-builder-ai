@@ -1,7 +1,30 @@
 import { schemaExtractor } from "./schema-extractor";
 import { querySchemaExtractor } from "./query-schema-extractor";
+import type { ConversationTurn } from "@/types";
 
 export type DatabaseType = "local" | "remote";
+
+const MAX_CONTEXT_TURNS = 6;
+
+export function buildConversationContext(turns: ConversationTurn[]): string {
+  if (turns.length === 0) return "";
+
+  const recent = turns.slice(-MAX_CONTEXT_TURNS);
+  const parts = recent.map((turn) => {
+    if (turn.role === "user") {
+      return `User: "${turn.content}"`;
+    }
+    const sqlPart = turn.sql?.length
+      ? `\nSQL yang dihasilkan: ${turn.sql.join("; ")}`
+      : "";
+    const summaryPart = turn.resultSummary
+      ? `\nRingkasan hasil: ${turn.resultSummary}`
+      : "";
+    return `Asisten: ${turn.content}${sqlPart}${summaryPart}`;
+  });
+
+  return `## RIWAYAT PERCAKAPAN (konteks sebelumnya)\n${parts.join("\n\n")}\n\nGunakan konteks ini jika user merujuk ke data/query sebelumnya. Jika pertanyaan user tidak terkait, abaikan konteks ini.`;
+}
 
 /**
  * Generate soft-delete rules — compact
@@ -91,6 +114,7 @@ export function buildSystemPrompt(
   userQuestion: string,
   database: DatabaseType = "local",
   selectedTables?: string[],
+  conversationContext?: string,
 ): string {
   let schemaDescription: string;
 
@@ -119,6 +143,7 @@ ${database === "remote" ? "Sistem SAMSAT Kalimantan Selatan (pajak kendaraan ber
 ${schemaDescription}
 
 ${domainContext}
+${conversationContext || ""}
 Pertanyaan User: "${userQuestion}"
 
 ## INSTRUKSI

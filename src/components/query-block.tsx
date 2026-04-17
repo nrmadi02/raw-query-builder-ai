@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   AlertCircle,
   CheckCircle2,
@@ -418,24 +418,12 @@ export function QueryBlock({
           </div>
         )}
 
-        {/* Page loading state */}
-        {pageLoading &&
-          !query.queryError &&
-          query.status !== "pending" &&
-          query.status !== "executing" && (
-            <div className="rounded-lg border bg-blue-50/50 dark:bg-blue-950/20 p-3 flex gap-2.5">
-              <Loader2 className="w-4 h-4 text-blue-600 dark:text-blue-400 animate-spin shrink-0 mt-0.5" />
-              <p className="text-sm text-blue-600 dark:text-blue-400">
-                Memuat halaman...
-              </p>
-            </div>
-          )}
-
         {/* Chart Visualization */}
         {query.chartType &&
           query.chartType !== "table" &&
           query.rows &&
-          query.rows.length > 0 && (
+          query.rows.length > 0 &&
+          !pageLoading && (
             <ChartRenderer data={query.rows} chartType={query.chartType} />
           )}
 
@@ -445,7 +433,12 @@ export function QueryBlock({
             {/* Table toolbar */}
             <div className="flex items-center justify-between">
               <div className="text-xs text-muted-foreground">
-                {totalRows > 0 ? (
+                {pageLoading ? (
+                  <span className="flex items-center gap-1.5 text-primary">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Memuat halaman {currentPage}...
+                  </span>
+                ) : totalRows > 0 ? (
                   <>
                     Menampilkan {displayStart}-{displayEnd} dari {totalRows}{" "}
                     baris
@@ -458,7 +451,8 @@ export function QueryBlock({
                 <button
                   type="button"
                   onClick={copyData}
-                  className="p-1.5 rounded hover:bg-muted transition-colors"
+                  disabled={pageLoading}
+                  className="p-1.5 rounded hover:bg-muted transition-colors disabled:opacity-40"
                   title="Copy Data (CSV)"
                   aria-label="Copy Data as CSV"
                 >
@@ -471,7 +465,8 @@ export function QueryBlock({
                 <button
                   type="button"
                   onClick={handleExportCSV}
-                  className="p-1.5 rounded hover:bg-muted transition-colors"
+                  disabled={pageLoading}
+                  className="p-1.5 rounded hover:bg-muted transition-colors disabled:opacity-40"
                   aria-label="Export CSV"
                 >
                   <Download className="w-3.5 h-3.5 text-muted-foreground" />
@@ -479,7 +474,8 @@ export function QueryBlock({
                 <button
                   type="button"
                   onClick={handleExportExcel}
-                  className="p-1.5 rounded hover:bg-muted transition-colors text-[10px] font-medium text-muted-foreground"
+                  disabled={pageLoading}
+                  className="p-1.5 rounded hover:bg-muted transition-colors text-[10px] font-medium text-muted-foreground disabled:opacity-40"
                   aria-label="Export Excel"
                 >
                   XLS
@@ -487,9 +483,19 @@ export function QueryBlock({
               </div>
             </div>
 
-            <div className="rounded-lg border overflow-hidden">
+            <div className="rounded-lg border overflow-hidden relative">
+              {pageLoading && (
+                <div className="absolute inset-0 bg-background/60 backdrop-blur-[2px] z-10 flex items-center justify-center">
+                  <Loader2 className="w-5 h-5 text-primary animate-spin" />
+                </div>
+              )}
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table
+                  className={cn(
+                    "w-full text-sm transition-opacity",
+                    pageLoading && "opacity-50",
+                  )}
+                >
                   <thead className="border-b bg-muted/20">
                     <tr>
                       {Object.keys(query.rows[0]).map((key) => (

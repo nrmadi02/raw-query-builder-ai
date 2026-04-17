@@ -1,25 +1,53 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import type { AIResponse, Message, QueryResult } from "@/types";
+import type {
+  AIResponse,
+  ConversationTurn,
+  Message,
+  QueryResult,
+} from "@/types";
 import { useAppStore } from "@/store/app-store";
+import { useApiFetch } from "@/hooks/use-api-fetch";
+import type { ChatHistoryEntry } from "@/store/app-store";
+
+function buildResultSummary(queries: QueryResult[]): string {
+  const parts: string[] = [];
+  for (const q of queries) {
+    if (q.rows && q.rows.length > 0) {
+      const rowCount = q.pagination?.totalRows ?? q.rows.length;
+      parts.push(`${q.title}: ${rowCount} baris`);
+    }
+  }
+  return parts.join("; ") || "Tidak ada data";
+}
 
 export function useStreamChat() {
   const [response, setResponse] = useState<AIResponse | null>(null);
   const [streamingInsight, setStreamingInsight] = useState("");
+  const [streamingSQL, setStreamingSQL] = useState("");
+  const [selectedTables, setSelectedTables] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [historyKey, setHistoryKey] = useState(0);
   const streamingInsightRef = useRef("");
   const fallbackInsightRef = useRef<string | null>(null);
-  const messagesRef = useRef<Message[]>([]);
   const responseRef = useRef<AIResponse | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const executeAbortRef = useRef<AbortController | null>(null);
+  // Session counter: increment on every loadConversation/reset to invalidate stale async ops
+  const sessionRef = useRef(0);
 
   const addChatEntry = useAppStore((s) => s.addChatEntry);
+  const apiFetch = useApiFetch();
+  const conversationTurns = useAppStore((s) => s.conversationTurns);
+  const activeConversationId = useAppStore((s) => s.activeConversationId);
+  const addTurn = useAppStore((s) => s.addTurn);
+  const updateLastAssistantTurn = useAppStore((s) => s.updateLastAssistantTurn);
+  const setConversationId = useAppStore((s) => s.setConversationId);
+  const clearConversation = useAppStore((s) => s.clearConversation);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       abortControllerRef.current?.abort();
@@ -36,21 +64,23 @@ export function useStreamChat() {
   }, []);
 
   const executeQueries = useCallback(
-    async (queries: QueryResult[], signal: AbortSignal) => {
+    async (queries: QueryResult[], signal: AbortSignal, sessionKey: number) => {
       setLoadingStep("Mengeksekusi query...");
 
-      // Mark all queries as executing
-      setResponse((prev) =>
-        prev
-          ? {
-              ...prev,
-              queries: prev.queries.map((q) => ({
-                ...q,
-                status: "executing" as const,
-              })),
-            }
-          : null,
-      );
+      // Mark queries as executing only if session is still valid
+      if (sessionRef.current === sessionKey) {
+        setResponse((prev) =>
+          prev
+            ? {
+                ...prev,
+                queries: prev.queries.map((q) => ({
+                  ...q,
+                  status: "executing" as const,
+                })),
+              }
+            : null,
+        );
+      }
 
       const executePromises = queries.map(async (query, index) => {
         if (!query.sql || query.sql.trim() === "" || query.validationError) {
@@ -69,7 +99,7 @@ export function useStreamChat() {
               sql: query.sql,
               page: 1,
               pageSize: 10,
-              database: "remote", // Gunakan database Samsat Kalimantan Selatan
+              database: "remote",
             }),
             signal,
           });
@@ -98,36 +128,11 @@ export function useStreamChat() {
 
       const results = await Promise.all(executePromises);
 
-      // Update response with all results
-      setResponse((prev) => {
-        if (!prev) return null;
-        const updatedQueries = prev.queries.map((q, i) => {
-          const result = results.find((r) => r.index === i);
-          if (!result) return q;
-          if (result.status === "error") {
-            return {
-              ...q,
-              status: "error" as const,
-              queryError: result.error,
-              rows: [],
-            };
-          }
-          return {
-            ...q,
-            status: "completed" as const,
-            rows: result.rows,
-            columns: result.columns || q.columns,
-            executionTimeMs: result.executionTimeMs,
-            queryError: null,
-            pagination: result.pagination,
-          };
-        });
-        return { ...prev, queries: updatedQueries };
-      });
+      // Only apply results if this session is still active
+      if (sessionRef.current !== sessionKey) return results;
 
-      // Also update the ref
-      if (responseRef.current) {
-        const updatedQueries = responseRef.current.queries.map((q, i) => {
+      const updateQueries = (queries: QueryResult[]) =>
+        queries.map((q, i) => {
           const result = results.find((r) => r.index === i);
           if (!result) return q;
           if (result.status === "error") {
@@ -148,9 +153,15 @@ export function useStreamChat() {
             pagination: result.pagination,
           };
         });
+
+      setResponse((prev) =>
+        prev ? { ...prev, queries: updateQueries(prev.queries) } : null,
+      );
+
+      if (responseRef.current) {
         responseRef.current = {
           ...responseRef.current,
-          queries: updatedQueries,
+          queries: updateQueries(responseRef.current.queries),
         };
       }
 
@@ -163,8 +174,8 @@ export function useStreamChat() {
     async (
       userQuestion: string,
       queriesWithRows: QueryResult[],
-      model: string,
       signal: AbortSignal,
+      convContext?: string,
     ) => {
       const queriesWithData = queriesWithRows.filter(
         (q) => q.rows && q.rows.length > 0,
@@ -184,7 +195,7 @@ export function useStreamChat() {
               title: q.title,
               rows: q.rows,
             })),
-            model,
+            conversation_context: convContext || null,
           }),
           signal,
         });
@@ -214,7 +225,7 @@ export function useStreamChat() {
             const lines = part.split("\n");
             let dataStr = "";
             for (const line of lines) {
-              if (line.startsWith("data: ")) dataStr = line.slice(6);
+              if (line.startsWith("data:")) dataStr = line.slice(5).trim();
             }
             if (!dataStr || dataStr === "[DONE]") continue;
 
@@ -244,15 +255,13 @@ export function useStreamChat() {
   );
 
   const submit = useCallback(
-    async (prompt: string, model: string) => {
-      // Cancel previous request
+    async (prompt: string) => {
       abortControllerRef.current?.abort();
       executeAbortRef.current?.abort();
 
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
 
-      // Separate abort controller for execute + insight phase
       const executeAbort = new AbortController();
       executeAbortRef.current = executeAbort;
 
@@ -260,21 +269,37 @@ export function useStreamChat() {
       setError(null);
       setResponse(null);
       setStreamingInsight("");
+      setStreamingSQL("");
+      setSelectedTables([]);
       setLoadingStep("Menghubungkan ke AI...");
       streamingInsightRef.current = "";
 
-      const userMessage: Message = { role: "user", content: prompt };
-      messagesRef.current = [...messagesRef.current, userMessage];
+      // Add user turn to conversation
+      const userTurn: ConversationTurn = {
+        id: crypto.randomUUID(),
+        role: "user",
+        content: prompt,
+        timestamp: Date.now(),
+      };
+      addTurn(userTurn);
+
+      // Build messages array from accumulated turns + new message (read from store to avoid stale closure)
+      const currentTurns = [
+        ...useAppStore.getState().conversationTurns,
+        userTurn,
+      ];
+      const messages: Message[] = currentTurns.map((t) => ({
+        role: t.role,
+        content: t.content,
+      }));
 
       try {
-        setLoadingStep("Memvalidasi pertanyaan...");
-
         const res = await fetch("/api/chat/stream", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            messages: messagesRef.current,
-            model,
+            messages,
+            conversationTurns: currentTurns,
           }),
           signal: abortController.signal,
         });
@@ -291,8 +316,6 @@ export function useStreamChat() {
             (await res.text()) || "Terjadi kesalahan dari sisi server",
           );
         }
-
-        setLoadingStep("Membuat query SQL...");
 
         const reader = res.body?.getReader();
         if (!reader) {
@@ -328,9 +351,16 @@ export function useStreamChat() {
 
             if (!eventType || !dataStr) continue;
 
-            if (eventType === "metadata") {
-              try {
-                const data = JSON.parse(dataStr);
+            try {
+              const data = JSON.parse(dataStr);
+
+              if (eventType === "step") {
+                setLoadingStep(data.message);
+              } else if (eventType === "tables_selected") {
+                setSelectedTables(data.tables || []);
+              } else if (eventType === "sql_chunk") {
+                setStreamingSQL((prev) => prev + (data.content || ""));
+              } else if (eventType === "metadata") {
                 const newResponse: AIResponse = {
                   explanation: data.explanation,
                   insight: null,
@@ -339,17 +369,19 @@ export function useStreamChat() {
                 setResponse(newResponse);
                 responseRef.current = newResponse;
                 fallbackInsightRef.current = data.fallbackInsight || null;
-              } catch {
-                // Skip invalid JSON
+              } else if (eventType === "error") {
+                setError(data.message);
               }
-            } else if (eventType === "done") {
-              // Stream complete, now execute queries
+            } catch {
+              // Skip invalid JSON
             }
           }
         }
 
-        // Check if aborted during stream
         if (abortController.signal.aborted) return;
+
+        // Capture session key at this point for stale-check
+        const currentSession = sessionRef.current;
 
         // Phase 2: Execute queries in parallel
         const currentResponse = responseRef.current;
@@ -358,21 +390,40 @@ export function useStreamChat() {
           currentResponse.queries.length > 0 &&
           !currentResponse.queries.some((q) => q.validationError)
         ) {
-          await executeQueries(currentResponse.queries, executeAbort.signal);
+          await executeQueries(
+            currentResponse.queries,
+            executeAbort.signal,
+            currentSession,
+          );
         }
 
-        // Check if aborted during execution
-        if (executeAbort.signal.aborted) return;
+        if (
+          executeAbort.signal.aborted ||
+          sessionRef.current !== currentSession
+        )
+          return;
+
+        // Build conversation context for insight generation
+        const convContextForInsight = currentTurns
+          .slice(-6)
+          .filter((t) => t.role === "assistant")
+          .map((t) =>
+            t.resultSummary ? `${t.content} (${t.resultSummary})` : t.content,
+          )
+          .join("; ");
 
         // Phase 3: Generate insight with real data
         const finalResponse = responseRef.current;
-        if (finalResponse) {
+        if (finalResponse && sessionRef.current === currentSession) {
           const insight = await generateInsight(
             prompt,
             finalResponse.queries,
-            model,
             executeAbort.signal,
+            convContextForInsight,
           );
+
+          // Guard: session might have changed while insight was generating
+          if (sessionRef.current !== currentSession) return;
 
           const finalInsight = insight || fallbackInsightRef.current;
           if (finalInsight) {
@@ -385,36 +436,68 @@ export function useStreamChat() {
         setLoading(false);
         setLoadingStep("");
 
-        // Save to chat history after everything is done
+        // Add assistant turn to conversation with SQL and result summary
         if (responseRef.current) {
+          const sqls = responseRef.current.queries
+            .map((q) => q.sql)
+            .filter(Boolean) as string[];
+          const summary = buildResultSummary(responseRef.current.queries);
+
+          updateLastAssistantTurn({
+            content: responseRef.current.explanation || "",
+            sql: sqls,
+            resultSummary: summary,
+          });
+
+          // Ensure conversation exists — create on first prompt, reuse on follow-up
+          let convId = useAppStore.getState().activeConversationId;
+          if (!convId) {
+            try {
+              const convRes = await apiFetch("/api/conversations", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  title: prompt.slice(0, 80),
+                  turns: useAppStore.getState().conversationTurns,
+                }),
+              });
+              if (convRes.ok) {
+                const convData = await convRes.json();
+                convId = convData.conversation.id;
+                setConversationId(convId!);
+              }
+            } catch (err) {
+              console.error("Failed to create conversation:", err);
+            }
+          }
+
+          // Save to chat history with conversationId
           const entry = {
             id: crypto.randomUUID(),
             prompt,
             response: responseRef.current,
             timestamp: Date.now(),
+            conversationId: convId ?? undefined,
           };
 
-          // Save to database first
           try {
-            const res = await fetch("/api/chat-history", {
+            const res = await apiFetch("/api/chat-history", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 prompt,
                 response: entry.response,
+                conversationId: convId,
               }),
             });
             if (res.ok) {
               const data = await res.json();
-              // Use the ID from database if available
               entry.id = data.id;
             }
           } catch (err) {
             console.error("Failed to save to database:", err);
-            // Continue with local save even if DB fails
           }
 
-          // Then add to local store
           addChatEntry(entry);
         }
       } catch (err: unknown) {
@@ -428,31 +511,117 @@ export function useStreamChat() {
         setError(message);
         setLoading(false);
         setLoadingStep("");
-        messagesRef.current = messagesRef.current.slice(0, -1);
       }
     },
-    [addChatEntry, executeQueries, generateInsight],
+    [
+      addChatEntry,
+      executeQueries,
+      generateInsight,
+      conversationTurns,
+      activeConversationId,
+      addTurn,
+      updateLastAssistantTurn,
+      setConversationId,
+      apiFetch,
+    ],
   );
 
   const reset = useCallback(() => {
     abortControllerRef.current?.abort();
     executeAbortRef.current?.abort();
+    sessionRef.current += 1; // Invalidate any pending async ops
     setResponse(null);
     setStreamingInsight("");
+    setStreamingSQL("");
+    setSelectedTables([]);
     setError(null);
     setLoading(false);
     setLoadingStep("");
-    messagesRef.current = [];
     responseRef.current = null;
-  }, []);
+    clearConversation();
+  }, [clearConversation]);
 
   const loadConversation = useCallback(
-    (prompt: string, savedResponse: AIResponse) => {
-      messagesRef.current = [{ role: "user", content: prompt }];
-      responseRef.current = savedResponse;
-      setResponse(savedResponse);
-      setStreamingInsight(savedResponse.insight || "");
+    (entries: ChatHistoryEntry[], conversationId?: string) => {
+      // Abort any pending operations & invalidate their session
+      abortControllerRef.current?.abort();
+      executeAbortRef.current?.abort();
+      sessionRef.current += 1; // All pending async ops will see a mismatched session and bail
+
+      // Reset all state refs
+      streamingInsightRef.current = "";
+      fallbackInsightRef.current = null;
+      responseRef.current = null;
+
+      // Reset all React state
+      setLoading(false);
+      setLoadingStep("");
       setError(null);
+      setStreamingSQL("");
+      setSelectedTables([]);
+      setStreamingInsight("");
+
+      if (!entries || entries.length === 0) {
+        setResponse(null);
+        useAppStore.getState().setActiveConversation(null, []);
+        setHistoryKey((k) => k + 1);
+        return;
+      }
+
+      // Sort entries by timestamp ascending (oldest first)
+      const sortedEntries = [...entries].sort(
+        (a, b) => a.timestamp - b.timestamp,
+      );
+
+      // Rekonstruksi SEMUA turns dari seluruh entries
+      // Setiap entry = 1 user turn + 1 assistant turn
+      const turns: ConversationTurn[] = [];
+      for (const entry of sortedEntries) {
+        // User turn
+        turns.push({
+          id: crypto.randomUUID(),
+          role: "user",
+          content: entry.prompt,
+          timestamp: entry.timestamp - 1,
+        });
+
+        // Assistant turn
+        if (entry.response) {
+          const sqls = entry.response.queries
+            ?.map((q) => q.sql)
+            .filter(Boolean) as string[];
+          const summary = buildResultSummary(entry.response.queries || []);
+          turns.push({
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: entry.response.explanation || "",
+            sql: sqls,
+            resultSummary: summary,
+            timestamp: entry.timestamp,
+          });
+        }
+      }
+
+      // Tampilkan response dari entry TERAKHIR (yang paling baru dalam slice)
+      const lastEntry = sortedEntries[sortedEntries.length - 1];
+      const freshResponse = lastEntry.response
+        ? {
+            ...lastEntry.response,
+            queries: [...(lastEntry.response.queries ?? [])],
+          }
+        : null;
+
+      // Set response BEFORE Zustand update to avoid useSyncExternalStore
+      // triggering a render with old response
+      responseRef.current = freshResponse;
+      setResponse(freshResponse);
+      setStreamingInsight(freshResponse?.insight ?? "");
+      setHistoryKey((k) => k + 1);
+
+      // Update Zustand conversation state after React state
+      useAppStore
+        .getState()
+        .setActiveConversation(conversationId || null, turns);
     },
     [],
   );
@@ -460,9 +629,14 @@ export function useStreamChat() {
   return {
     response,
     streamingInsight,
+    streamingSQL,
+    selectedTables,
     loading,
     loadingStep,
     error,
+    historyKey,
+    conversationTurns,
+    activeConversationId,
     submit,
     cancel,
     reset,

@@ -1,12 +1,3 @@
-export interface Model {
-  id: string;
-  label: string;
-  provider: string;
-  badge: "FREE" | "PAID";
-  envKey: string;
-  note: string;
-}
-
 export type QueryStatus = "pending" | "executing" | "completed" | "error";
 
 export interface PaginationInfo {
@@ -38,4 +29,21 @@ export interface AIResponse {
 export interface Message {
   role: "user" | "assistant" | "system";
   content: string;
+}
+
+export interface ConversationTurn {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  sql?: string[];
+  resultSummary?: string;
+  timestamp: number;
+}
+
+export interface Conversation {
+  id: string;
+  title: string;
+  turns: ConversationTurn[];
+  createdAt: number;
+  updatedAt: number;
 }

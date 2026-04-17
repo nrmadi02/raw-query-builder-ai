@@ -9,30 +9,31 @@ import { EmptyState } from "@/components/empty-state";
 import { LoadingState } from "@/components/loading-state";
 import { InsightCard } from "@/components/insight-card";
 import { QueryBlock } from "@/components/query-block";
-import { findModel } from "@/components/model-selector";
 import type { AIResponse } from "@/types";
+
+const MODEL_LABEL = "GLM 5 Turbo";
 
 interface ResultsPanelProps {
   response: AIResponse | null;
   streamingInsight: string;
+  streamingSQL: string;
+  selectedTables: string[];
   loading: boolean;
   loadingStep: string;
   error: string | null;
-  selectedModel: string;
   onReset?: () => void;
 }
 
 export function ResultsPanel({
   response,
   streamingInsight,
+  streamingSQL,
+  selectedTables,
   loading,
   loadingStep,
   error,
-  selectedModel,
   onReset,
 }: ResultsPanelProps) {
-  const activeModel = findModel(selectedModel);
-
   const totalRows = useMemo(
     () =>
       response?.queries?.reduce((sum, q) => sum + (q.rows?.length ?? 0), 0) ??
@@ -53,7 +54,7 @@ export function ResultsPanel({
             <div className="flex-1" />
             <Badge variant="secondary" className="text-[10px] gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
-              {activeModel.label}
+              {MODEL_LABEL}
             </Badge>
             {response.queries?.length > 0 && (
               <Badge variant="outline" className="text-[10px]">
@@ -77,7 +78,12 @@ export function ResultsPanel({
       <ScrollArea className="flex-1">
         {/* Loading */}
         {loading && !response && (
-          <LoadingState modelLabel={activeModel.label} step={loadingStep} />
+          <LoadingState
+            modelLabel={MODEL_LABEL}
+            step={loadingStep}
+            selectedTables={selectedTables}
+            streamingSQL={streamingSQL}
+          />
         )}
 
         {/* Error */}

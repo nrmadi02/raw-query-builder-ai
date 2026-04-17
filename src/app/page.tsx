@@ -21,28 +21,31 @@ export default function Home() {
   const {
     response,
     streamingInsight,
+    streamingSQL,
+    selectedTables,
     loading,
     loadingStep,
     error,
+    historyKey,
+    conversationTurns,
     submit,
     cancel,
     reset,
     loadConversation,
   } = useStreamChat();
-  const selectedModel = useAppStore((s) => s.selectedModel);
   const [historyOpen, setHistoryOpen] = useState(false);
   const { refetch: refetchChatHistory } = useChatHistory();
 
   const handleSubmit = (prompt: string) => {
-    submit(prompt, selectedModel);
+    submit(prompt);
   };
 
   const handleHistorySelect = (
-    prompt: string,
-    savedResponse: ChatHistoryEntry["response"],
+    entries: ChatHistoryEntry[],
+    conversationId?: string,
   ) => {
-    if (savedResponse) {
-      loadConversation(prompt, savedResponse);
+    if (entries.length > 0) {
+      loadConversation(entries, conversationId);
     }
   };
 
@@ -103,19 +106,21 @@ export default function Home() {
         <div className="flex-1 overflow-hidden">
           <ResizablePanelGroup orientation="horizontal" className="h-full">
             <ResizablePanel defaultSize="45%" minSize="30%" maxSize="65%">
-              <PromptPanel loading={loading} onSubmit={handleSubmit} />
+              <PromptPanel loading={loading} onSubmit={handleSubmit} hasConversation={conversationTurns.length > 0} onNewConversation={reset} conversationTurns={conversationTurns} />
             </ResizablePanel>
 
             <ResizableHandle withHandle />
 
             <ResizablePanel defaultSize="55%" minSize="35%">
               <ResultsPanel
+                key={historyKey}
                 response={response}
                 streamingInsight={streamingInsight}
+                streamingSQL={streamingSQL}
+                selectedTables={selectedTables}
                 loading={loading}
                 loadingStep={loadingStep}
                 error={error}
-                selectedModel={selectedModel}
                 onReset={reset}
               />
             </ResizablePanel>
