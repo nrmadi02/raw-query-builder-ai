@@ -20,7 +20,7 @@ export default function CompleteProfilePage() {
     // Redirect if already has name
 
     if (!isPending && session?.user?.name) {
-      router.push("/");
+      router.push("/dashboard");
     }
   }, [session, isPending, router]);
 
@@ -38,7 +38,7 @@ export default function CompleteProfilePage() {
       });
 
       if (response.ok) {
-        router.push("/");
+        router.push("/dashboard");
       } else {
         throw new Error("Failed to update name");
       }
@@ -59,10 +59,10 @@ export default function CompleteProfilePage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-teal-50 via-emerald-50 to-emerald-100 dark:from-slate-950 dark:to-slate-900 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-teal-50 via-emerald-50 to-emerald-100 dark:from-slate-950 dark:to-slate-900 p-4">
       <div className="w-full max-w-md p-8 bg-white dark:bg-slate-900 rounded-2xl shadow-xl space-y-6">
         <div className="text-center space-y-2">
-          <div className="mx-auto w-16 h-16 bg-gradient-to-br from-teal-600 to-emerald-500 rounded-full flex items-center justify-center mb-4">
+          <div className="mx-auto w-16 h-16 bg-linear-to-br from-teal-600 to-emerald-500 rounded-full flex items-center justify-center mb-4">
             <User className="h-8 w-8 text-white" />
           </div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">
@@ -96,7 +96,7 @@ export default function CompleteProfilePage() {
           <Button
             type="submit"
             disabled={isLoading || !name.trim()}
-            className="w-full h-12 text-base font-medium bg-gradient-to-r from-teal-600 to-emerald-500 hover:from-teal-700 hover:to-emerald-600 text-white transition-all"
+            className="w-full h-12 text-base font-medium bg-linear-to-r from-teal-600 to-emerald-500 hover:from-teal-700 hover:to-emerald-600 text-white transition-all"
           >
             {isLoading ? (
               <>
