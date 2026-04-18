@@ -1,9 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/services/db";
+import type { AIResponse } from "@/types";
 
-// GET /api/chat-history - Get all chat history for current user
-export async function GET(req: NextRequest) {
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+/** Expected request body shape for creating a new chat history entry. */
+interface CreateChatHistoryBody {
+  prompt: string;
+  response: AIResponse;
+  conversationId?: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Route Handlers
+// ---------------------------------------------------------------------------
+
+/** GET /api/chat-history — Returns all chat history entries for the current user. */
+export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
     const session = await auth.api.getSession({ headers: req.headers });
 
@@ -26,8 +42,8 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/chat-history - Create new chat history entry
-export async function POST(req: NextRequest) {
+/** POST /api/chat-history — Creates a new chat history entry for the current user. */
+export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     const session = await auth.api.getSession({ headers: req.headers });
 
@@ -35,7 +51,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await req.json();
+    const body = (await req.json()) as CreateChatHistoryBody;
     const { prompt, response, conversationId } = body;
 
     if (!prompt || !response) {
@@ -49,8 +65,8 @@ export async function POST(req: NextRequest) {
       data: {
         userId: session.user.id,
         prompt,
-        response,
-        conversationId: conversationId || null,
+        response: response as unknown as any,
+        conversationId: conversationId ?? null,
       },
     });
 
