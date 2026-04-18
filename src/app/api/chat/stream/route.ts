@@ -6,11 +6,18 @@ import {
 } from "@/services/prompt-builder";
 import { querySchemaExtractor } from "@/services/query-schema-extractor";
 import { PYTHON_BACKEND_URL } from "@/lib/config";
-import type { ConversationTurn, Message } from "@/types";
+import { authenticateAndRateLimit } from "@/lib/api-guard";
+import { queryCache, CACHE_TTL } from "@/lib/query-cache";
+import { generateCacheKey } from "@/lib/cache-hash";
+import type { AIResponse, ConversationTurn, Message } from "@/types";
 
 const DEFAULT_DATABASE: DatabaseType = "remote";
 
 export async function POST(req: Request) {
+  const guard = await authenticateAndRateLimit(req, "chat");
+  if (!guard.ok) return guard.response;
+  const { rateLimitHeaders } = guard.data;
+
   const encoder = new TextEncoder();
 
   const sendEvent = (
@@ -53,6 +60,18 @@ export async function POST(req: Request) {
       );
     }
 
+    // Check cache before stream
+    const cacheKey = await generateCacheKey({
+      question: lastUserMessage,
+      database: selectedDatabase,
+      contextHash: convContext,
+    });
+    const cached = queryCache.get<{
+      tables: string[];
+      response: AIResponse;
+    }>(cacheKey);
+    let cacheHit = !!cached;
+
     const stream = new ReadableStream({
       async start(controller) {
         try {
@@ -83,7 +102,35 @@ export async function POST(req: Request) {
             return;
           }
 
-          // Step 2: Select relevant tables
+          // Step 2: Serve from cache if available
+          if (cached) {
+            sendStep(controller, "cache_hit", "Mengambil dari cache...");
+            sendEvent(controller, "tables_selected", {
+              tables: cached.tables || [],
+            });
+            const fullSQL = cached.response.queries
+              .map((q) => q.sql)
+              .filter(Boolean)
+              .join("\n\n");
+            if (fullSQL) {
+              sendEvent(controller, "sql_chunk", { content: fullSQL });
+            }
+            sendEvent(controller, "metadata", {
+              explanation: cached.response.explanation,
+              fallbackInsight: cached.response.insight,
+              queries: cached.response.queries.map((q) => ({
+                ...q,
+                rows: undefined,
+                queryError: null,
+                status: "pending",
+              })),
+            });
+            sendEvent(controller, "done", {});
+            controller.close();
+            return;
+          }
+
+          // Step 3: Select relevant tables
           sendStep(
             controller,
             "selecting_tables",
@@ -91,47 +138,54 @@ export async function POST(req: Request) {
           );
           let selectedTables: string[] | undefined;
 
-          try {
-            const tableSelectionPrompt =
-              buildTableSelectionPrompt(lastUserMessage);
-            const selectRes = await fetch(
-              `${PYTHON_BACKEND_URL}/api/select-tables`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  messages: [
-                    { role: "system", content: tableSelectionPrompt },
-                    { role: "user", content: lastUserMessage },
-                  ],
-                }),
-              },
-            );
+          // Check table selection cache first
+          const tableCacheKey = await generateCacheKey({
+            question: lastUserMessage,
+            database: selectedDatabase,
+            type: "table_selection",
+          });
+          const cachedTables = queryCache.get<string[]>(tableCacheKey);
 
-            if (selectRes.ok) {
-              const selectResult = await selectRes.json();
-              selectedTables = selectResult.tables;
-              console.log(
-                `[Stream Route] Table Selection: ${selectedTables?.length || 0} tables`,
-                selectedTables,
+          if (cachedTables) {
+            selectedTables = cachedTables;
+          } else {
+            try {
+              const tableSelectionPrompt =
+                buildTableSelectionPrompt(lastUserMessage);
+              const selectRes = await fetch(
+                `${PYTHON_BACKEND_URL}/api/select-tables`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    messages: [
+                      { role: "system", content: tableSelectionPrompt },
+                      { role: "user", content: lastUserMessage },
+                    ],
+                  }),
+                },
               );
-            } else {
+
+              if (selectRes.ok) {
+                const selectResult = await selectRes.json();
+                selectedTables = selectResult.tables;
+                if (selectedTables) {
+                  queryCache.set(tableCacheKey, selectedTables, CACHE_TTL.TABLE_SELECTION);
+                }
+              }
+            } catch (err) {
               console.warn(
-                "[Stream Route] Table Selection failed, using full schema",
+                "[Stream Route] Table Selection error, using full schema:",
+                err,
               );
             }
-          } catch (err) {
-            console.warn(
-              "[Stream Route] Table Selection error, using full schema:",
-              err,
-            );
           }
 
           sendEvent(controller, "tables_selected", {
             tables: selectedTables || [],
           });
 
-          // Step 3: Build prompt with filtered schema + conversation context
+          // Step 4: Build prompt with filtered schema + conversation context
           const systemPrompt = buildSystemPrompt(
             lastUserMessage,
             selectedDatabase,
@@ -146,7 +200,7 @@ export async function POST(req: Request) {
           }
           historyMessages.push({ role: "user", content: lastUserMessage });
 
-          // Step 4: Stream SQL generation from Python backend
+          // Step 5: Stream SQL generation from Python backend
           sendStep(
             controller,
             "generating_sql",
@@ -216,7 +270,6 @@ export async function POST(req: Request) {
                 if (parsed.status === "complete" && parsed.result) {
                   finalResult = parsed.result as Record<string, unknown>;
                 } else if (parsed.content) {
-                  // Forward LLM token chunks to frontend
                   sendEvent(controller, "sql_chunk", {
                     content: parsed.content,
                   });
@@ -227,7 +280,7 @@ export async function POST(req: Request) {
             }
           }
 
-          // Step 5: Send final metadata
+          // Step 6: Send final metadata
           if (!finalResult) {
             sendEvent(controller, "error", {
               message: "Tidak ada response dari AI",
@@ -253,6 +306,14 @@ export async function POST(req: Request) {
             queries: pendingQueries,
           });
 
+          // Cache the result
+          const aiResponse: AIResponse = {
+            explanation: finalResult.explanation as string,
+            insight: (finalResult as Record<string, unknown>).insight as string | null,
+            queries: pendingQueries as AIResponse["queries"],
+          };
+          queryCache.set(cacheKey, { tables: selectedTables || [], response: aiResponse }, CACHE_TTL.SQL_GENERATION);
+
           sendEvent(controller, "done", {});
           controller.close();
         } catch (streamError: unknown) {
@@ -272,14 +333,16 @@ export async function POST(req: Request) {
       },
     });
 
-    return new Response(stream, {
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        Connection: "keep-alive",
-        "X-Accel-Buffering": "no",
-      },
+    const responseHeaders = new Headers({
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+      "X-Cache": cacheHit ? "HIT" : "MISS",
     });
+    rateLimitHeaders.forEach((v, k) => responseHeaders.set(k, v));
+
+    return new Response(stream, { headers: responseHeaders });
   } catch (error: unknown) {
     const message =
       error instanceof Error ? error.message : "Terjadi kesalahan";

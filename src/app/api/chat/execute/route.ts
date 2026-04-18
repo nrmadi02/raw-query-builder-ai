@@ -2,9 +2,14 @@ import { NextResponse } from "next/server";
 import { validateSQL } from "@/services/sql-guard";
 import { prisma } from "@/services/db";
 import { queryPrisma } from "@/services/query-db";
+import { authenticateAndRateLimit } from "@/lib/api-guard";
 import type { PaginationInfo } from "@/types";
 
 export async function POST(req: Request) {
+  const guard = await authenticateAndRateLimit(req, "execute");
+  if (!guard.ok) return guard.response;
+  const { rateLimitHeaders } = guard.data;
+
   try {
     const body = await req.json();
     const { sql, page = 1, pageSize = 10, database = "local" } = body;
@@ -68,7 +73,9 @@ export async function POST(req: Request) {
       totalPages,
     };
 
-    return NextResponse.json({ rows, columns, executionTimeMs, pagination });
+    const response = NextResponse.json({ rows, columns, executionTimeMs, pagination });
+    rateLimitHeaders.forEach((v, k) => response.headers.set(k, v));
+    return response;
   } catch (error: unknown) {
     const message =
       error instanceof Error ? error.message : "Failed to execute query";

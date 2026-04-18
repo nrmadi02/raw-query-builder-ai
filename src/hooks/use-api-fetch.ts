@@ -28,6 +28,14 @@ export function useApiFetch() {
         }
       }
 
+      if (res.status === 429) {
+        const errData = await res.clone().json().catch(() => null);
+        const retryAfter = errData?.resetIn
+          ? Math.ceil(errData.resetIn / 1000)
+          : Number(res.headers.get("Retry-After")) || 60;
+        console.warn(`[Rate Limit] Terlalu banyak request. Coba lagi dalam ${retryAfter} detik.`);
+      }
+
       return res;
     },
     [router],

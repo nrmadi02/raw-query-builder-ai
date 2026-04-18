@@ -3,9 +3,16 @@ import { buildSystemPrompt, buildTableSelectionPrompt, buildConversationContext,
 import { schemaExtractor } from "@/services/schema-extractor";
 import { querySchemaExtractor } from "@/services/query-schema-extractor";
 import { PYTHON_BACKEND_URL } from "@/lib/config";
-import type { ConversationTurn, Message } from "@/types";
+import { authenticateAndRateLimit } from "@/lib/api-guard";
+import { queryCache, CACHE_TTL } from "@/lib/query-cache";
+import { generateCacheKey } from "@/lib/cache-hash";
+import type { AIResponse, ConversationTurn, Message } from "@/types";
 
 export async function POST(req: Request) {
+  const guard = await authenticateAndRateLimit(req, "chat");
+  if (!guard.ok) return guard.response;
+  const { rateLimitHeaders } = guard.data;
+
   try {
     const { messages, database = "local", conversationTurns = [] } = (await req.json()) as {
       messages: Message[];
@@ -47,39 +54,65 @@ export async function POST(req: Request) {
       });
     }
 
-    console.log(
-      `[Context Validation] ✓ Valid (${validation.confidence} confidence)`,
-      validation.matchedTables?.length
-        ? `Tables: ${validation.matchedTables.join(", ")}`
-        : "",
-    );
+    // ── STEP 0.5: Check cache ──
+    const cacheKey = await generateCacheKey({
+      question: lastUserMessage,
+      database: selectedDatabase,
+      contextHash: convContext,
+    });
+    const cached = queryCache.get<{ tables: string[]; response: AIResponse }>(cacheKey);
+    if (cached) {
+      const response = NextResponse.json({
+        explanation: cached.response.explanation,
+        insight: null,
+        queries: cached.response.queries.map((q) => ({
+          ...q,
+          rows: undefined,
+          queryError: null,
+          status: "pending",
+        })),
+      });
+      response.headers.set("X-Cache", "HIT");
+      rateLimitHeaders.forEach((v, k) => response.headers.set(k, v));
+      return response;
+    }
 
     // ── STEP 1: Select relevant tables (Two-Step LLM) ──
     let selectedTables: string[] | undefined;
 
     if (selectedDatabase === "remote") {
-      try {
-        const tableSelectionPrompt = buildTableSelectionPrompt(lastUserMessage);
-        const selectRes = await fetch(`${PYTHON_BACKEND_URL}/api/select-tables`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            messages: [
-              { role: "system", content: tableSelectionPrompt },
-              { role: "user", content: lastUserMessage },
-            ],
-          }),
-        });
+      const tableCacheKey = await generateCacheKey({
+        question: lastUserMessage,
+        database: selectedDatabase,
+        type: "table_selection",
+      });
+      const cachedTables = queryCache.get<string[]>(tableCacheKey);
+      if (cachedTables) {
+        selectedTables = cachedTables;
+      } else {
+        try {
+          const tableSelectionPrompt = buildTableSelectionPrompt(lastUserMessage);
+          const selectRes = await fetch(`${PYTHON_BACKEND_URL}/api/select-tables`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              messages: [
+                { role: "system", content: tableSelectionPrompt },
+                { role: "user", content: lastUserMessage },
+              ],
+            }),
+          });
 
-        if (selectRes.ok) {
-          const selectResult = await selectRes.json();
-          selectedTables = selectResult.tables;
-          console.log(`[Table Selection] ✓ Selected ${selectedTables?.length || 0} tables:`, selectedTables);
-        } else {
-          console.warn("[Table Selection] ✗ Failed, using full schema as fallback");
+          if (selectRes.ok) {
+            const selectResult = await selectRes.json();
+            selectedTables = selectResult.tables;
+            if (selectedTables) {
+              queryCache.set(tableCacheKey, selectedTables, CACHE_TTL.TABLE_SELECTION);
+            }
+          }
+        } catch (err) {
+          console.warn("[Table Selection] ✗ Error, using full schema as fallback:", err);
         }
-      } catch (err) {
-        console.warn("[Table Selection] ✗ Error, using full schema as fallback:", err);
       }
     }
 
@@ -107,27 +140,33 @@ export async function POST(req: Request) {
 
     const result = await pythonBackendRes.json();
 
-    const queries: any[] = result.queries || [];
-    const pendingQueries = queries.map((q: any) => ({
-      ...q,
+    const queries: unknown[] = result.queries || [];
+    const pendingQueries = queries.map((q) => ({
+      ...(q as Record<string, unknown>),
       rows: undefined,
       queryError: null,
       status: "pending",
     }));
 
-    return NextResponse.json({
+    // Cache the result
+    const aiResponse: AIResponse = {
+      explanation: result.explanation as string,
+      insight: null,
+      queries: pendingQueries as AIResponse["queries"],
+    };
+    queryCache.set(cacheKey, { tables: selectedTables || [], response: aiResponse }, CACHE_TTL.SQL_GENERATION);
+
+    const response = NextResponse.json({
       explanation: result.explanation,
       insight: null,
       queries: pendingQueries,
     });
-  } catch (error: any) {
-    console.error("Error in AI Route:", error);
-    return NextResponse.json(
-      {
-        error:
-          error?.message || "Terjadi kesalahan proxy menuju Python Backend",
-      },
-      { status: 500 },
-    );
+    response.headers.set("X-Cache", "MISS");
+    rateLimitHeaders.forEach((v, k) => response.headers.set(k, v));
+    return response;
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Terjadi kesalahan proxy menuju Python Backend";
+    console.error("Error in AI Route:", message);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

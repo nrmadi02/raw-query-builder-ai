@@ -305,6 +305,18 @@ export function useStreamChat() {
         });
 
         if (!res.ok) {
+          if (res.status === 429) {
+            const errData = await res.json().catch(() => null);
+            const retryAfter = errData?.resetIn
+              ? Math.ceil(errData.resetIn / 1000)
+              : Number(res.headers.get("Retry-After")) || 60;
+            throw new Error(
+              `Terlalu banyak request. Coba lagi dalam ${retryAfter} detik.`,
+            );
+          }
+          if (res.status === 401) {
+            throw new Error("Sesi telah berakhir. Silakan login kembali.");
+          }
           const contentType = res.headers.get("content-type");
           if (contentType?.includes("application/json")) {
             const errData = await res.json().catch(() => null);
