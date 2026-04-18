@@ -33,17 +33,16 @@ export default function Home() {
     reset,
     loadConversation,
   } = useStreamChat();
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const { refetch: refetchChatHistory } = useChatHistory();
 
-  const handleSubmit = (prompt: string) => {
-    submit(prompt);
-  };
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  // Trigger an initial load of chat history from the database on mount
+  useChatHistory();
 
   const handleHistorySelect = (
     entries: ChatHistoryEntry[],
     conversationId?: string,
-  ) => {
+  ): void => {
     if (entries.length > 0) {
       loadConversation(entries, conversationId);
     }
@@ -56,7 +55,7 @@ export default function Home() {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => setHistoryOpen((v) => !v)}
+          onClick={() => setHistoryOpen((prev) => !prev)}
           className="h-7 w-7"
           aria-label={historyOpen ? "Tutup riwayat" : "Buka riwayat"}
         >
@@ -66,17 +65,21 @@ export default function Home() {
             <PanelLeft className="w-4 h-4" />
           )}
         </Button>
+
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 rounded-md bg-primary flex items-center justify-center">
             <Bot className="w-3.5 h-3.5 text-primary-foreground" />
           </div>
           <span className="font-semibold text-sm">AI Query Builder</span>
         </div>
+
         <div className="h-4 w-px bg-border" />
         <span className="text-xs text-muted-foreground">
           Sistem pajak kendaraan bermotor
         </span>
+
         <div className="flex-1" />
+
         {loading && (
           <Button
             variant="ghost"
@@ -89,6 +92,7 @@ export default function Home() {
             Batalkan
           </Button>
         )}
+
         <ThemeToggle />
         <UserMenu />
       </header>
@@ -102,11 +106,17 @@ export default function Home() {
           </div>
         )}
 
-        {/* Main Resizable Layout */}
+        {/* Resizable main content area */}
         <div className="flex-1 overflow-hidden">
           <ResizablePanelGroup orientation="horizontal" className="h-full">
             <ResizablePanel defaultSize="45%" minSize="30%" maxSize="65%">
-              <PromptPanel loading={loading} onSubmit={handleSubmit} hasConversation={conversationTurns.length > 0} onNewConversation={reset} conversationTurns={conversationTurns} />
+              <PromptPanel
+                loading={loading}
+                onSubmit={submit}
+                hasConversation={conversationTurns.length > 0}
+                onNewConversation={reset}
+                conversationTurns={conversationTurns}
+              />
             </ResizablePanel>
 
             <ResizableHandle withHandle />

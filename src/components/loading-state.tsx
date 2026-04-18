@@ -10,49 +10,49 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+/**
+ * Ordered list of pipeline steps shown during AI query processing.
+ * The `key` values correspond to the `step` field sent in SSE "step" events
+ * by the stream route. The labels and icons are purely for display.
+ */
 const STEPS = [
-  {
-    key: "validating",
-    label: "Memvalidasi pertanyaan",
-    icon: Search,
-  },
-  {
-    key: "selecting_tables",
-    label: "Memilih tabel relevan",
-    icon: Database,
-  },
-  {
-    key: "generating_sql",
-    label: "Membuat query SQL",
-    icon: Sparkles,
-  },
-  {
-    key: "executing",
-    label: "Mengeksekusi query",
-    icon: Database,
-  },
-  {
-    key: "analyzing",
-    label: "Menganalisis data",
-    icon: MessageSquare,
-  },
+  { key: "validating",       label: "Memvalidasi pertanyaan", icon: Search       },
+  { key: "selecting_tables", label: "Memilih tabel relevan",  icon: Database     },
+  { key: "generating_sql",   label: "Membuat query SQL",      icon: Sparkles     },
+  { key: "executing",        label: "Mengeksekusi query",     icon: Database     },
+  { key: "analyzing",        label: "Menganalisis data",      icon: MessageSquare },
 ] as const;
 
 type StepKey = (typeof STEPS)[number]["key"];
 
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Maps a `loadingStep` string (from the `useStreamChat` hook) to the index
+ * of the currently active step in the STEPS array.
+ *
+ * This relies on Indonesian keyword matching because `loadingStep` values are
+ * human-readable strings set in `use-stream-chat.ts` (e.g. "Memvalidasi pertanyaan...").
+ * Returns -1 if no step is active.
+ */
 function getActiveStepIndex(step: string): number {
   if (step.includes("validasi") || step.includes("hubungkan")) return 0;
-  if (step.includes("tabel") || step.includes("memilih")) return 1;
-  if (
-    step.includes("membuat") ||
-    step.includes("query") ||
-    step.includes("SQL")
-  )
-    return 2;
-  if (step.includes("eksekusi")) return 3;
-  if (step.includes("analisis") || step.includes("analisa")) return 4;
+  if (step.includes("tabel")   || step.includes("memilih"))   return 1;
+  if (step.includes("membuat") || step.includes("query") || step.includes("SQL")) return 2;
+  if (step.includes("eksekusi"))                               return 3;
+  if (step.includes("analisis") || step.includes("analisa"))   return 4;
   return -1;
 }
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 
 interface LoadingStateProps {
   modelLabel: string;
@@ -86,29 +86,27 @@ export function LoadingState({
           </div>
 
           <div className="space-y-0">
-            {STEPS.map((s, i) => {
+            {STEPS.map((stepItem, i) => {
               const isCompleted = activeIndex > i;
               const isActive = activeIndex === i;
               const isPending = activeIndex < i;
 
               const showTableBadges =
                 isActive &&
-                s.key === "selecting_tables" &&
+                stepItem.key === "selecting_tables" &&
                 selectedTables &&
                 selectedTables.length > 0;
 
               return (
-                <div key={s.key} className="flex gap-3">
-                  {/* Vertical line + icon */}
+                <div key={stepItem.key} className="flex gap-3">
+                  {/* Step indicator circle + vertical connector */}
                   <div className="flex flex-col items-center">
                     <div
                       className={cn(
                         "w-7 h-7 rounded-full flex items-center justify-center shrink-0 border-2 transition-colors duration-300",
-                        isCompleted &&
-                          "bg-primary border-primary text-primary-foreground",
-                        isActive && "bg-primary/10 border-primary text-primary",
-                        isPending &&
-                          "bg-muted border-muted-foreground/20 text-muted-foreground/40",
+                        isCompleted && "bg-primary border-primary text-primary-foreground",
+                        isActive    && "bg-primary/10 border-primary text-primary",
+                        isPending   && "bg-muted border-muted-foreground/20 text-muted-foreground/40",
                       )}
                     >
                       {isCompleted ? (
@@ -129,20 +127,20 @@ export function LoadingState({
                     )}
                   </div>
 
-                  {/* Label + extras */}
+                  {/* Step label + optional extras */}
                   <div className={cn("pb-4", i === STEPS.length - 1 && "pb-0")}>
                     <p
                       className={cn(
                         "text-[13px] leading-tight pt-1 transition-colors duration-300",
-                        isCompleted &&
-                          "text-muted-foreground line-through decoration-muted-foreground/30",
-                        isActive && "text-foreground font-medium",
-                        isPending && "text-muted-foreground/50",
+                        isCompleted && "text-muted-foreground line-through decoration-muted-foreground/30",
+                        isActive    && "text-foreground font-medium",
+                        isPending   && "text-muted-foreground/50",
                       )}
                     >
-                      {s.label}
+                      {stepItem.label}
                     </p>
 
+                    {/* Table badges shown while the table-selection step is active */}
                     {showTableBadges && (
                       <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
                         {selectedTables!.map((table) => (
@@ -156,7 +154,8 @@ export function LoadingState({
                       </div>
                     )}
 
-                    {isActive && s.key === "generating_sql" && streamingSQL && (
+                    {/* Streaming SQL preview shown while generating */}
+                    {isActive && stepItem.key === "generating_sql" && streamingSQL && (
                       <pre className="mt-2 text-[11px] font-mono text-muted-foreground bg-muted/60 rounded-md p-2 max-h-36 overflow-y-auto whitespace-pre-wrap break-all leading-relaxed w-full">
                         {streamingSQL}
                         <span className="animate-pulse text-primary">|</span>
